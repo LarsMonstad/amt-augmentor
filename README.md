@@ -78,6 +78,46 @@ Example:
     piano_timestretch_1.2_abc123.wav
     piano_timestretch_1.2_abc123.mid
 
+## Dataset Creation & Validation
+
+The dataset follows the same format as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro), which is commonly used for Automatic Music Transcription (AMT) tasks. The main difference is that this dataset includes augmented versions of the original recordings.
+
+### Creating the Dataset CSV
+
+The script will create a CSV file containing all original and augmented files, organizing them into train/test/validation splits. Songs assigned to test or validation splits will have their augmented versions excluded to prevent data leakage.
+
+```bash
+# Create dataset with default split ratios (70% train, 15% test, 15% validation)
+python create_maestro_csv.py /path/to/directory
+
+# Create dataset with custom split ratios
+python csvcreater.py /path/to/directory --train-ratio 0.8 --test-ratio 0.1 --validation-ratio 0.1
+```
+
+### Validating the Dataset Split
+
+To ensure data integrity, you can validate that no augmented versions of test/validation songs appear in the training set:
+
+```bash
+python validate_split.py /path/to/dataset.csv
+```
+
+The validation script checks for:
+- Augmented songs incorrectly included in test/validation splits
+- Cross-split contamination (augmented versions of test/validation songs appearing in training)
+- Distribution of original vs augmented songs in each split
+
+### CSV Format
+
+The generated CSV follows the MAESTRO format with the following columns:
+- canonical_composer
+- canonical_title 
+- split
+- year
+- midi_filename
+- audio_filename
+- duration
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
