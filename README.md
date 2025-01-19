@@ -27,7 +27,7 @@ You can install amt-augpy either via pip or by cloning the repository:
 
 ### From source
 
-    git clone https://github.com/yourusername/amt-augpy.git
+    git clone https://github.com/yourusername/amt-augpy.git](https://github.com/LarsMonstad/amt-augpy1.0.git
     cd amt-augpy
     pip install -r requirements.txt
 
