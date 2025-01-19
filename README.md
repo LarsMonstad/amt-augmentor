@@ -135,7 +135,8 @@ MIT License - see LICENSE file for details.
 If you use this toolkit in your research, please cite:
 
     @software{amt_augpy,
+      author    = {Lars Monstad},
       title = {amt-augpy: Audio augmentation toolkit for AMT datasets},
       version = {1.0},
-      year = {2024}
+      year = {2025}
     }
