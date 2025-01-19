@@ -1,4 +1,4 @@
-#Used to create CSV file like the MAESTRO 3.0 dataset. 
+#used to create csv files for the data, with default trainign splits
 import os
 import csv
 from pathlib import Path
@@ -102,8 +102,8 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
             title,
             split,
             2022,
-            midi_path,
-            wav_path,
+            f"{folder_name}/{midi_file}"
+            f"{folder_name}/{wav_file}",
             duration
         ])
 
@@ -125,8 +125,8 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
                                 os.path.splitext(aug_midi)[0],
                                 'train',  # Augmented versions go to train
                                 2022,
-                                aug_midi_path,
-                                aug_wav_path,
+                                f"{folder_name}/{aug_midi}",
+                                f"{folder_name}/{aug_wav}",
                                 aug_duration
                             ])
 
