@@ -51,7 +51,7 @@ def get_wav_duration(file_path):
     try:
         y, sr = librosa.load(file_path, sr=None)
         duration = librosa.get_duration(y=y, sr=sr)
-        return duration
+        return round(duration,2)
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         return 0
@@ -97,19 +97,18 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
         wav_path = os.path.join(directory, wav_file)
         duration = get_wav_duration(wav_path)
         
+    # Add original song
         rows.append([
             'Standard composer',
             title,
             split,
             2022,
-            f"{folder_name}/{midi_file}"
-            f"{folder_name}/{wav_file}",
+            f"{folder_name}/{midi_file}",  # Separate columns for midi and wav
+            f"{folder_name}/{wav_file}",   
             duration
         ])
 
-        # Only add augmented versions for training split
         if split == 'train':
-            # Find and add augmented versions
             for f in all_files:
                 if f.endswith('.mid') and is_augmented_version(f):
                     aug_base = get_original_song_name(f)
@@ -117,19 +116,16 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
                         aug_midi = f
                         aug_wav = os.path.splitext(f)[0] + '.wav'
                         if aug_wav in all_files:
-                            aug_midi_path = os.path.join(directory, aug_midi)
-                            aug_wav_path = os.path.join(directory, aug_wav)
-                            aug_duration = get_wav_duration(aug_wav_path)
+                            aug_duration = get_wav_duration(os.path.join(directory, aug_wav))
                             rows.append([
                                 'Standard composer',
                                 os.path.splitext(aug_midi)[0],
-                                'train',  # Augmented versions go to train
+                                'train',
                                 2022,
-                                f"{folder_name}/{aug_midi}",
+                                f"{folder_name}/{aug_midi}",  # Separate columns maintained
                                 f"{folder_name}/{aug_wav}",
                                 aug_duration
                             ])
-
     # Write CSV
     if rows:
         with open(csv_filename, 'w', newline='', encoding='utf-8') as f:
