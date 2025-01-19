@@ -10,6 +10,8 @@ from distortionchorus import apply_gain_and_chorus
 from tqdm import tqdm
 from add_pauses import calculate_time_distance
 from convertfiles import standardize_audio
+from create_maestro_csv import create_song_list
+from validate_split import validate_dataset_split
 
 def midi_to_ann(input_midi, output_ann):
     # Load MIDI file
@@ -241,6 +243,13 @@ def main():
     # After all processing is done, check for matching files
     print("\nChecking final results...")
     check_matching_files(args.input_directory)
+
+    print("\nCreating dataset CSV file...")
+    create_song_list(args.input_directory)
+    
+    print("\nValidating dataset split...")
+    csv_filename = f"{os.path.basename(args.input_directory)}.csv"
+    validate_dataset_split(csv_filename)
 
 if __name__ == "__main__":
     main()
