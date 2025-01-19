@@ -91,7 +91,7 @@ The script will create a CSV file containing all original and augmented files, o
 python create_maestro_csv.py /path/to/directory
 
 # Create dataset with custom split ratios
-python csvcreater.py /path/to/directory --train-ratio 0.8 --test-ratio 0.1 --validation-ratio 0.1
+python create_maestro_csv.py /path/to/directory --train-ratio 0.8 --test-ratio 0.1 --validation-ratio 0.1
 ```
 
 ### Validating the Dataset Split
