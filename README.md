@@ -43,9 +43,13 @@ You can install amt-augpy either via pip or by cloning the repository:
 
 ### Basic Usage
 
-    python main.py /path/to/dataset/directory
+    python -m amt_augpy.main /path/to/dataset/directory
 
 This will process all compatible audio files in the directory and their corresponding MIDI files. The script automatically selects random parameters within predefined ranges (specified in main.py) for each augmentation type.
+
+## Basic usage with pip 
+
+	amt-augpy /path/to/dataset/directory
 
 ### Parameter Ranges (defined in main.py)
 
