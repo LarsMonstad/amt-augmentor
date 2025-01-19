@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="amt-augpy",
-    version="1.0.1",
+    version="1.0.2",
     packages=find_packages(),
     install_requires=[
         'librosa==0.9.1',  # Specific version for compatibility with torchcrepe
