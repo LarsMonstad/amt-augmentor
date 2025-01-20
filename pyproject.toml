@@ -1,6 +1,6 @@
 [project]
 name = "amt-augpy1.0"
-version = "1.0.2"
+version = "1.0.3"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
