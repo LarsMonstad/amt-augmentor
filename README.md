@@ -1,4 +1,4 @@
-# amt-augpy 1.0
+# amt-augpy 1.0 AUGMENTATION for AMT datasets
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -6,7 +6,15 @@
 [![NumPy](https://img.shields.io/badge/numpy-1.24.0-blue.svg)](https://numpy.org)
 [![SoundFile](https://img.shields.io/badge/soundfile-0.12.1-red.svg)](https://python-soundfile.readthedocs.io/)
 
-A comprehensive Python toolkit for augmenting Automatic Music Transcription (AMT) datasets through various audio transformations while maintaining synchronization between audio and MIDI files.
+A comprehensive Python toolkit for augmenting Automatic Music Transcription (AMT) datasets through various audio transformations while maintaining synchronization between audio and MIDI files. The dataset follows the same format as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro), which is commonly used for Automatic Music Transcription (AMT) tasks. 
+
+The toolkit expects a folder containing paired audio and MIDI files with matching names. The audio file and MIDI file must be ground truth data, as this toolkit is only for augmenting existing datasets - a common technique in Machine Learning.
+
+```
+Folder/
+├── song1.wav        # Audio file
+├── song1.mid        # Ground truth annotated midi file
+```
 
 ## Features
 
