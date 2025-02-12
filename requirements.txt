@@ -5,3 +5,4 @@ audiotsm==0.1.2
 pydub==0.25.1
 pedalboard==0.7.3
 tqdm==4.64.1
+pretty_midi>=0.2.10
