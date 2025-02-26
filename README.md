@@ -52,7 +52,7 @@ pip install amt-augpy1.0
 
 ```bash
 git clone https://github.com/LarsMonstad/amt-augpy1.0.git
-cd amt-augpy
+cd amt-augpy1.0
 pip install -e .
 ```
 
