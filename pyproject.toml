@@ -3,8 +3,8 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "amt-augpy"
-version = "1.0.3"
+name = "amt-augpy1.0"
+version = "1.0.4"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
@@ -45,4 +45,4 @@ dev = [
 ]
 
 [project.scripts]
-amt-augpy = "amt_augpy.main:main"
+amt_augpy10 = "amt_augpy.main:main"
