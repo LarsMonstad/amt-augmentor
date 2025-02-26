@@ -29,7 +29,7 @@ Folder/
 - **Parallel Processing**: Utilize multi-core processing for faster augmentation
 - **Configurable Parameters**: Easily customize all augmentation parameters
 
-## What's New in 1.0.3
+## What's New in 1.0.5
 
 - **Configuration System**: Use YAML configuration files to customize all parameters
 - **Parallel Processing**: Process multiple effects concurrently for faster performance
