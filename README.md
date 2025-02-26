@@ -2,11 +2,11 @@
 
 ## Python Data Augmentation Toolkit for Automatic Music Transcription (AMT)
 
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11-blue.svg)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Librosa](https://img.shields.io/badge/librosa-0.9.1-green.svg)](https://librosa.org/)
-[![NumPy](https://img.shields.io/badge/numpy-1.23.5-blue.svg)](https://numpy.org)
-[![SoundFile](https://img.shields.io/badge/soundfile-0.12.1-red.svg)](https://python-soundfile.readthedocs.io/)
+[![Librosa](https://img.shields.io/badge/librosa-0.9-green.svg)](https://librosa.org/)
+[![NumPy](https://img.shields.io/badge/numpy-1.23-blue.svg)](https://numpy.org)
+[![SoundFile](https://img.shields.io/badge/soundfile-0.12%2B-red.svg)](https://python-soundfile.readthedocs.io/)
 
 A comprehensive Python toolkit for augmenting Automatic Music Transcription (AMT) datasets through various audio transformations while maintaining synchronization between audio and MIDI files. The dataset follows the same format as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro), which is commonly used for Automatic Music Transcription (AMT) tasks. 
 
