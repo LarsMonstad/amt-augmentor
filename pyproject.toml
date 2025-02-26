@@ -25,7 +25,8 @@ dependencies = [
     "pretty_midi>=0.2.10",
     "tqdm>=4.64.1",
     "numba>=0.56.4",
-    "llvmlite>=0.39.1"
+    "llvmlite>=0.39.1",
+    "pyyaml>=5.1.0"
 ]
 
 [project.urls]
@@ -39,7 +40,7 @@ dev = [
     "black>=23.0.0",
     "pylint>=2.15.0",
     "sphinx>=6.0.0",
-    "types-PyYAML>=6.0.0",
+    "types-PyYAML>=5.4.0",
     "types-tqdm>=4.64.0",
 ]
 
