@@ -104,11 +104,16 @@ def test_midi_to_ann_and_ann_to_midi(tmp_path):
     assert converted_note.end == pytest.approx(1.0, rel=1e-5)
 
 
-def test_check_matching_files(tmp_path, capsys):
+def test_check_matching_files(tmp_path, caplog):
     """
     Test the check_matching_files function by creating a temporary directory
     with matching and non-matching files.
     """
+    import logging
+    
+    # Set up logging capture
+    caplog.set_level(logging.WARNING)
+    
     # Create dummy files:
     # - A matching pair: song1.wav and song1.mid
     # - A WAV file with no matching MIDI: song2.wav
@@ -119,13 +124,16 @@ def test_check_matching_files(tmp_path, capsys):
     (tmp_path / "song3.mid").write_text("dummy")
 
     # Run the check_matching_files function on the temporary directory
-    check_matching_files(str(tmp_path))
+    matches, wav_missing, mid_missing = check_matching_files(str(tmp_path))
 
-    # Capture printed output
-    captured = capsys.readouterr().out
-    # Verify that the expected messages are present
-    assert "No matching MIDI file for: song2.wav" in captured
-    assert "No matching WAV file for: song3.mid" in captured
-    # Also check that the summary shows one complete match
-    assert "Complete matches found: 1" in captured
+    # Verify the return values are correct
+    assert matches == 1
+    assert wav_missing == 1
+    assert mid_missing == 1
+    
+    # Verify log messages contain the expected content
+    assert any("No matching MIDI file for: song2.wav" in record.message 
+              for record in caplog.records)
+    assert any("No matching WAV file for: song3.mid" in record.message 
+              for record in caplog.records)
 

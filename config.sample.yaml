@@ -1,0 +1,72 @@
+# AMT-AugPy Sample Configuration
+# Copy this file and modify the values as needed
+
+# Time stretching configuration
+time_stretch:
+  # Enable/disable this augmentation
+  enabled: true
+  # Number of variations to generate per input file
+  variations: 3
+  # Minimum time stretch factor (0.6 = 60% speed, i.e. slower)
+  min_factor: 0.6
+  # Maximum time stretch factor (1.6 = 160% speed, i.e. faster)
+  max_factor: 1.6
+
+# Pitch shifting configuration
+pitch_shift:
+  enabled: true
+  variations: 3
+  # Semitone range for pitch shifting
+  min_semitones: -5
+  max_semitones: 5
+
+# Reverb and filter configuration
+reverb_filter:
+  enabled: true
+  variations: 3
+  # Room size controls reverb amount (0-100)
+  min_room_scale: 10
+  max_room_scale: 100
+  # Cutoff frequency pairs for filters [low pass, high pass]
+  # The first value is the high-pass cutoff, the second is the low-pass cutoff
+  cutoff_pairs:
+    - [20, 20000]    # Minimal filtering
+    - [300, 20000]   # Some low-end reduction
+    - [3000, 20000]  # Telephone-like high-pass
+    - [20, 16300]    # Slight high-end reduction
+    - [20, 17500]    # More high-end reduction
+    - [20, 18000]    # Subtle high-end reduction
+
+# Gain and chorus configuration 
+gain_chorus:
+  enabled: true
+  variations: 3
+  # Gain range (dB)
+  min_gain: 2
+  max_gain: 11
+  # Chorus depth controls intensity
+  min_depth: 0.1
+  max_depth: 0.6
+  # Chorus rate values (Hz) - randomly selected for each variation
+  rates:
+    - 0.5   # Slow chorus
+    - 1.0   # Medium chorus
+    - 2.0   # Fast chorus
+
+# Pause manipulation configuration
+add_pause:
+  enabled: true
+  # Threshold to detect pauses (seconds)
+  pause_threshold: 0.0033
+  # Minimum and maximum pause duration to modify (seconds)
+  min_pause_duration: 1.0
+  max_pause_duration: 5.0
+
+# Processing configuration
+processing:
+  # Number of parallel workers (set to 1 to disable parallelization)
+  num_workers: 4
+  # Optional cache directory for temporary files
+  cache_dir: null
+  # Optional output directory (overrides command line if specified)
+  output_dir: null
