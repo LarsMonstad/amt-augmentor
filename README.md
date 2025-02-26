@@ -45,7 +45,7 @@ You can install amt-augpy either via pip or by cloning the repository:
 ### Using pip
 
 ```bash
-pip install amt-augpy
+pip install amt-augpy1.0
 ```
 
 ### From source
