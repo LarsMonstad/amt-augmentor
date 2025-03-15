@@ -83,7 +83,6 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
 
     # Prepare CSV data
     rows = []
-    errors = []
     headers = ['canonical_composer', 'canonical_title', 'split', 'year', 
               'midi_filename', 'audio_filename', 'duration']
 
@@ -97,13 +96,12 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
         wav_path = os.path.join(directory, wav_file)
         duration = get_wav_duration(wav_path)
         
-    # Add original song
         rows.append([
             'Standard composer',
             title,
             split,
             2022,
-            f"{folder_name}/{midi_file}",  # Separate columns for midi and wav
+            f"{folder_name}/{midi_file}",
             f"{folder_name}/{wav_file}",   
             duration
         ])
@@ -122,10 +120,11 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
                                 os.path.splitext(aug_midi)[0],
                                 'train',
                                 2022,
-                                f"{folder_name}/{aug_midi}",  # Separate columns maintained
+                                f"{folder_name}/{aug_midi}",
                                 f"{folder_name}/{aug_wav}",
                                 aug_duration
                             ])
+                            
     # Write CSV
     if rows:
         with open(csv_filename, 'w', newline='', encoding='utf-8') as f:
@@ -140,6 +139,10 @@ def create_song_list(directory, split_ratios={'train': 0.7, 'test': 0.15, 'valid
             print(f"{split}: {count} songs ({count/total_orig*100:.1f}%)")
     else:
         print("No valid MIDI-WAV pairs found")
+    
+    # Return the CSV file path so it can be used by other functions
+    return csv_filename
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Create CSV list of MIDI and WAV files from a directory')
