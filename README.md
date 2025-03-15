@@ -77,7 +77,11 @@ pip install -e ".[dev]"
 
 ```bash
 amt-augpy /path/to/dataset/directory
+# Or running directly
+python -m amt_augpy.main /path/to/dataset/directory
 ```
+
+
 
 This will process all compatible audio files in the directory and their corresponding MIDI files. The script automatically selects random parameters within predefined ranges for each augmentation type.
 
