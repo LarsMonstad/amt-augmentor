@@ -17,6 +17,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Big thanks to https://github.com/Xpra-org/xpra/commit/04108790f05f0894e520c2d3e62dd16e136b9da2
+class TupleLoader(yaml.SafeLoader):
+    def construct_tuple(self, node):
+        return tuple(yaml.Loader.construct_sequence(self, node))
+
+TupleLoader.add_constructor("tag:yaml.org,2002:python/tuple", TupleLoader.construct_tuple)
 
 @dataclass
 class TimeStretchConfig:
@@ -126,7 +132,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
     if config_path and os.path.exists(config_path):
         try:
             with open(config_path, "r") as f:
-                yaml_config = yaml.safe_load(f)
+                yaml_config = yaml.load(f, Loader=TupleLoader)
 
             # Update configurations from YAML
             if yaml_config:
