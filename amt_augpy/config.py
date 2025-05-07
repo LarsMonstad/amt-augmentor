@@ -96,6 +96,11 @@ class AudioMergeConfig:
     enabled: bool = True
     merge_num: int = 1
 
+@dataclass
+class AddNoiseConfig:
+    """Configuration for adding noise to audio files"""
+
+    enabled: bool = true
 
 @dataclass
 class ProcessingConfig:
@@ -118,6 +123,7 @@ class Config:
     gain_chorus: GainChorusConfig = field(default_factory=GainChorusConfig)
     add_pause: AddPauseConfig = field(default_factory=AddPauseConfig)
     merge_audio: AudioMergeConfig = field(default_factory=AudioMergeConfig)
+    add_noise: AddNoiseConfig = field(default_factory=AddNoiseConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
 
 
@@ -178,6 +184,11 @@ def load_config(config_path: Optional[str] = None) -> Config:
                     for key, value in yaml_config["merge_audio"].items():
                         if hasattr(config.add_pause, key):
                             setattr(config.merge_audio, key, value)
+                
+                if "add_noise" in yaml_config:
+                    for key, value in yaml_config["add_noise"].items():
+                        if hasattr(config.add_noise, key):
+                            setattr(config.add_noise, key, value)
 
                 # Processing config
                 if "processing" in yaml_config:

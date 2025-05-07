@@ -562,6 +562,9 @@ def process_effect(
                 logger.error(
                     f"No merging is possible since {config.merge_audio.merge_num=} and {len(target_audio_files)=}"
                 )
+                
+        elif effect_type == "noise" and config.add_noise.enabled:
+            pass
 
         return new_ann_files
 
@@ -647,6 +650,7 @@ def process_files(
             "reverb",
             "chorus",
             "merge",
+            "noise"
         ]
 
         # Process effects in parallel if multiple workers are specified
@@ -816,7 +820,7 @@ def main() -> None:
         "--disable-effect",
         "-d",
         action="append",
-        choices=["pauses", "timestretch", "pitchshift", "reverb", "chorus", "merge"],
+        choices=["pauses", "timestretch", "pitchshift", "reverb", "chorus", "merge", "noise"],
         help="Disable specific effect (can be used multiple times)",
     )
 
@@ -879,6 +883,8 @@ def main() -> None:
                 config.gain_chorus.enabled = False
             elif effect == "merge":
                 config.merge_audio.enabled = False
+            elif effect == "noise":
+                config.add_noise.enabled = False
 
     # Setup output directory
     output_directory = config.processing.output_dir or args.input_directory
@@ -895,6 +901,7 @@ def main() -> None:
         "gain_chorus",
         "addpauses",
         "merge",
+        "noise"
     ]
     audio_files = [
         f for f in audio_files if not any(keyword in f for keyword in effect_keywords)
