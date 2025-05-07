@@ -101,6 +101,10 @@ class AddNoiseConfig:
     """Configuration for adding noise to audio files"""
 
     enabled: bool = true
+    variations: int = 3
+    min_intensity: float = 0.1
+    max_intensity: float = 3
+    randomized: bool = True
 
 @dataclass
 class ProcessingConfig:

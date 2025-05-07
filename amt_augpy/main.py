@@ -21,6 +21,7 @@ from amt_augpy.time_stretch import apply_time_stretch
 from amt_augpy.pitch_shift import apply_pitch_shift
 from amt_augpy.reverbfilter import apply_reverb_and_filters
 from amt_augpy.distortionchorus import apply_gain_and_chorus
+from amt_augpy.add_noise import apply_noise
 from amt_augpy.add_pauses import calculate_time_distance
 from amt_augpy.merge_audio import merge_audios
 from amt_augpy.convertfiles import standardize_audio
@@ -428,7 +429,7 @@ def process_effect(
                 # Note: We're fixing the variable name confusion by always using consistent names
                 low_cutoff, high_cutoff = random.choice(cutoff_pairs)
 
-                random_suffix = random_word(5)
+                random_suffix: str = random_word(5) if config.enable_random_suffix else''
                 output_filename = generate_output_filename(
                     audio_base, "reverb_filters", room_scale, random_suffix, audio_ext
                 )
@@ -564,7 +565,69 @@ def process_effect(
                 )
                 
         elif effect_type == "noise" and config.add_noise.enabled:
-            pass
+            # Noise intensity variations
+
+            variations: int = config.add_noise.variations
+            min_intensity: int = config.add_noise.min_intensity
+            max_intensity: int = config.add_noise.max_intensity
+
+            generated_intensities: set[int] = set()
+            if config.add_noise.randomized:
+                for i in range(variations):
+                    intensity = 1.0
+                    max_attempts = 10  # Prevent infinite loops
+                    attempts = 0
+
+                    while (
+                        intensity == 1.0 or intensity in generated_intensities
+                    ) and attempts < max_attempts:
+                        intensity = round(random.uniform(min_intensity, max_intensity), 1)
+                        attempts += 1
+
+                    if attempts == max_attempts:
+                        logger.warning(
+                            f"Could not find unique noise intensity factor after {max_attempts} attempts"
+                        )
+                        if i > 0:  # Skip if we already have some variations
+                            continue
+                        intensity = round(
+                            random.uniform(min_intensity, max_intensity), 1
+                        )  # Use anyway
+
+                    generated_intensities.add(intensity)
+
+            else:
+                generated_intensities = set(list(np.linspace(min_intensity,
+                                                         max_intensity,
+                                                         variations+1,
+                                                         dtype=float)))
+                try:
+                    generated_intensities.remove(1.0)
+                except:
+                    pass
+
+                while len(generated_intensities) > variations:
+                    generated_intensities.pop()
+
+            for intensity in generated_intensities:
+                random_suffix: str = random_word(5) if config.enable_random_suffix else''
+                output_filename = generate_output_filename(
+                    audio_base, "reverb_filters", room_scale, random_suffix, audio_ext
+                )
+                output_file_path = os.path.join(output_directory, output_filename)
+
+                logger.info(f"Applying noise with intensity {intensity}")
+                try:
+                    output_ann_file = apply_noise(
+                        standardized_audio,
+                        temp_ann_file,
+                        output_file_path,
+                        intensity
+                    )
+                    if output_ann_file:
+                        new_ann_files.append(output_ann_file)
+                except Exception as e:
+                    logger.error(f"Error applying gain and chorus: {e}")
 
         return new_ann_files
 
