@@ -88,7 +88,6 @@ class AddPauseConfig:
     min_pause_duration: int = 1
     max_pause_duration: int = 5
 
-
 @dataclass
 class AudioMergeConfig:
     """Configuration for merging of multiple audio files"""
@@ -100,7 +99,7 @@ class AudioMergeConfig:
 class AddNoiseConfig:
     """Configuration for adding noise to audio files"""
 
-    enabled: bool = true
+    enabled: bool = True
     variations: int = 3
     min_intensity: float = 0.1
     max_intensity: float = 3
@@ -232,6 +231,7 @@ def save_default_config(output_path: str) -> None:
         "gain_chorus": {k: v for k, v in vars(config.gain_chorus).items()},
         "add_pause": {k: v for k, v in vars(config.add_pause).items()},
         "merge_audio": {k: v for k, v in vars(config.merge_audio).items()},
+        "add_noise": {k: v for k, v in vars(config.add_noise).items()},
         "processing": {k: v for k, v in vars(config.processing).items()},
     }
 

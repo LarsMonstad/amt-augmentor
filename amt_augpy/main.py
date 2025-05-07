@@ -597,7 +597,7 @@ def process_effect(
                     generated_intensities.add(intensity)
 
             else:
-                generated_intensities = set(list(np.linspace(min_intensity,
+                generated_intensities = set(list(np.logspace(min_intensity,
                                                          max_intensity,
                                                          variations+1,
                                                          dtype=float)))
@@ -612,7 +612,7 @@ def process_effect(
             for intensity in generated_intensities:
                 random_suffix: str = random_word(5) if config.enable_random_suffix else''
                 output_filename = generate_output_filename(
-                    audio_base, "reverb_filters", room_scale, random_suffix, audio_ext
+                    audio_base, "noise", intensity, random_suffix, audio_ext
                 )
                 output_file_path = os.path.join(output_directory, output_filename)
 
