@@ -32,6 +32,7 @@ class TimeStretchConfig:
     variations: int = 3
     min_factor: float = 0.6
     max_factor: float = 1.6
+    randomized: bool = True
 
 
 @dataclass
@@ -42,6 +43,7 @@ class PitchShiftConfig:
     variations: int = 3
     min_semitones: int = -5
     max_semitones: int = 5
+    randomized: bool = True
 
 
 @dataclass
@@ -108,6 +110,8 @@ class ProcessingConfig:
 class Config:
     """Main configuration container."""
 
+    enable_random_suffix: bool = False
+
     time_stretch: TimeStretchConfig = field(default_factory=TimeStretchConfig)
     pitch_shift: PitchShiftConfig = field(default_factory=PitchShiftConfig)
     reverb_filter: ReverbFilterConfig = field(default_factory=ReverbFilterConfig)
@@ -136,6 +140,9 @@ def load_config(config_path: Optional[str] = None) -> Config:
 
             # Update configurations from YAML
             if yaml_config:
+                if 'enable_random_suffix' in yaml_config:
+                    config.enable_random_suffix = yaml_config['enable_random_suffix']
+            
                 # Time stretch config
                 if "time_stretch" in yaml_config:
                     for key, value in yaml_config["time_stretch"].items():

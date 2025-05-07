@@ -28,6 +28,8 @@ from amt_augpy.create_maestro_csv import create_song_list
 from amt_augpy.validate_split import validate_dataset_split
 from amt_augpy.config import load_config, save_default_config, Config
 
+import numpy as np
+
 # Configure logger
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -208,35 +210,10 @@ def generate_output_filename(
     Returns:
         A formatted output filename
     """
+    if not random_suffix:
+    	return f"{base_name}_{effect_name}_{measure}{extension}"
+    
     return f"{base_name}_{effect_name}_{measure}_{random_suffix}{extension}"
-
-
-# def process_directory(input_directory):
-#     # Find audio and MIDI files in the directory, excluding ones that have been processed
-#     effect_keywords = ['timestretch', 'pitchshift', 'reverb_filters', 'gain_chorus', 'addpauses']
-
-#     audio_files = [f for f in os.listdir(input_directory)
-#                    if f.endswith(('.flac', '.wav'))
-#                    and not any(keyword in f for keyword in effect_keywords)]
-
-#     midi_files = [f for f in os.listdir(input_directory)
-#                   if f.endswith('.mid')
-#                   and not any(keyword in f for keyword in effect_keywords)]
-
-#     if not audio_files or not midi_files:
-#         print("Error: Directory must contain at least one audio file (.flac or .wav) and one MIDI file (.mid)")
-#         return
-
-#     # Process each pair of audio and MIDI files
-#     for audio_file in audio_files:
-#         for midi_file in midi_files:
-#             print(f"\nProcessing {audio_file} with {midi_file}")
-#             process_files(
-#                 os.path.join(input_directory, audio_file),
-#                 os.path.join(input_directory, midi_file),
-#                 input_directory
-#             )
-
 
 def process_effect(
     input_directory: str,
@@ -270,7 +247,7 @@ def process_effect(
         if effect_type == "pauses" and config.add_pause.enabled:
             # Apply pauses
             logger.info("Applying pause manipulation")
-            random_suffix = random_word(5)
+            random_suffix: str = random_word(5) if config.enable_random_suffix else ''
             output_filename = generate_output_filename(
                 audio_base, "addpauses", 1, random_suffix, audio_ext
             )
@@ -290,34 +267,50 @@ def process_effect(
 
         elif effect_type == "timestretch" and config.time_stretch.enabled:
             # Time stretch variations
-            variations = config.time_stretch.variations
-            min_factor = config.time_stretch.min_factor
-            max_factor = config.time_stretch.max_factor
+            variations: int = config.time_stretch.variations
+            min_factor: int = config.time_stretch.min_factor
+            max_factor: int = config.time_stretch.max_factor
 
-            generated_factors = set()
-            for i in range(variations):
-                stretch_factor = 1.0
-                max_attempts = 10  # Prevent infinite loops
-                attempts = 0
+            generated_factors: set[int] = set()
+            if config.time_stretch.randomized:
+                for i in range(variations):
+                    stretch_factor = 1.0
+                    max_attempts = 10  # Prevent infinite loops
+                    attempts = 0
 
-                while (
-                    stretch_factor == 1.0 or stretch_factor in generated_factors
-                ) and attempts < max_attempts:
-                    stretch_factor = round(random.uniform(min_factor, max_factor), 1)
-                    attempts += 1
+                    while (
+                        stretch_factor == 1.0 or stretch_factor in generated_factors
+                    ) and attempts < max_attempts:
+                        stretch_factor = round(random.uniform(min_factor, max_factor), 1)
+                        attempts += 1
 
-                if attempts == max_attempts:
-                    logger.warning(
-                        f"Could not find unique stretch factor after {max_attempts} attempts"
-                    )
-                    if i > 0:  # Skip if we already have some variations
-                        continue
-                    stretch_factor = round(
-                        random.uniform(min_factor, max_factor), 1
-                    )  # Use anyway
+                    if attempts == max_attempts:
+                        logger.warning(
+                            f"Could not find unique stretch factor after {max_attempts} attempts"
+                        )
+                        if i > 0:  # Skip if we already have some variations
+                            continue
+                        stretch_factor = round(
+                            random.uniform(min_factor, max_factor), 1
+                        )  # Use anyway
 
-                generated_factors.add(stretch_factor)
-                random_suffix = random_word(5)
+                    generated_factors.add(stretch_factor)
+                    
+            else:
+                generated_factors = set(list(np.linspace(min_factor,
+                                                         max_factor,
+                                                         variations+1,
+                                                         dtype=float)))
+                try:
+                    generated_factors.remove(1.0)
+                except:
+                    pass
+                    
+                while len(generated_factors) > variations:
+                    generated_factors.pop()
+                    
+            for stretch_factor in generated_factors:
+                random_suffix: str = random_word(5) if config.enable_random_suffix else ''
                 output_filename = generate_output_filename(
                     audio_base, "timestretch", stretch_factor, random_suffix, audio_ext
                 )
@@ -340,48 +333,68 @@ def process_effect(
 
         elif effect_type == "pitchshift" and config.pitch_shift.enabled:
             # Pitch shift variations
-            variations = config.pitch_shift.variations
-            min_semitones = config.pitch_shift.min_semitones
-            max_semitones = config.pitch_shift.max_semitones
+            variations: int = config.pitch_shift.variations
+            min_semitones: int = config.pitch_shift.min_semitones
+            max_semitones: int = config.pitch_shift.max_semitones
 
-            generated_semitones = set()
-            for i in range(variations):
-                semitones = 0
-                max_attempts = 10
-                attempts = 0
+            generated_semitones: set[int] = set()
+            if config.pitch_shift.randomized:
+                for i in range(variations):
+                    semitones = 0
+                    max_attempts = 10
+                    attempts = 0
 
-                while (
-                    semitones == 0 or semitones in generated_semitones
-                ) and attempts < max_attempts:
-                    semitones = random.randint(min_semitones, max_semitones)
-                    attempts += 1
+                    while (
+                        semitones == 0 or semitones in generated_semitones
+                    ) and attempts < max_attempts:
+                        semitones = random.randint(min_semitones, max_semitones)
+                        attempts += 1
 
-                if attempts == max_attempts:
-                    logger.warning(
-                        f"Could not find unique semitones value after {max_attempts} attempts"
-                    )
-                    if i > 0:
-                        continue
-                    semitones = random.randint(min_semitones, max_semitones)
+                    if attempts == max_attempts:
+                        logger.warning(
+                            f"Could not find unique semitones value after {max_attempts} attempts"
+                        )
+                        if i > 0:
+                            continue
+                        semitones = random.randint(min_semitones, max_semitones)
 
-                generated_semitones.add(semitones)
-                random_suffix = random_word(5)
-                output_filename = generate_output_filename(
-                    audio_base, "pitchshift", semitones, random_suffix, audio_ext
-                )
-                output_file_path = os.path.join(output_directory, output_filename)
-
-                logger.info(f"Applying pitch shift: {semitones} semitones")
+                    generated_semitones.add(semitones)
+            else:
+                generated_semitones = set(list(np.linspace(min_semitones,
+                                                            max_semitones,
+                                                            variations+1,
+                                                            dtype=int)))
                 try:
-                    output_ann_file = apply_pitch_shift(
-                        standardized_audio, temp_ann_file, output_file_path, semitones
+                    generated_semitones.remove(0)
+                except:
+                    pass
+                    
+                if len(generated_semitones) < variations:
+                    logger.warning(
+                        f"Impossible to have {variations} unique semitones values"
                     )
-                    if output_ann_file:
-                        new_ann_files.append(output_ann_file)
-                except Exception as e:
-                    logger.error(
-                        f"Error applying pitch shift ({semitones} semitones): {e}"
+                    
+                while len(generated_semitones) > variations:
+                    generated_semitones.pop()
+                        
+                for semitones in generated_semitones:
+                    random_suffix: str = random_word(5) if config.enable_random_suffix else''
+                    output_filename = generate_output_filename(
+                        audio_base, "pitchshift", semitones, random_suffix, audio_ext
                     )
+                    output_file_path = os.path.join(output_directory, output_filename)
+
+                    logger.info(f"Applying pitch shift: {semitones} semitones")
+                    try:
+                        output_ann_file = apply_pitch_shift(
+                            standardized_audio, temp_ann_file, output_file_path, semitones
+                        )
+                        if output_ann_file:
+                            new_ann_files.append(output_ann_file)
+                    except Exception as e:
+                        logger.error(
+                            f"Error applying pitch shift ({semitones} semitones): {e}"
+                        )
 
         elif effect_type == "reverb" and config.reverb_filter.enabled:
             # Reverb and filter variations
