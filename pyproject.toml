@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amt-augpy1.0"
-version = "1.0.5"
+version = "1.0.7"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
@@ -45,4 +45,4 @@ dev = [
 ]
 
 [project.scripts]
-amt_augpy10 = "amt_augpy.main:main"
+amt-augpy = "amt_augpy.main:main"
