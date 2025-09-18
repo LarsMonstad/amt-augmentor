@@ -734,15 +734,14 @@ def main() -> None:
     # Create and validate dataset CSV if not skipped
     if not args.skip_csv:
         logger.info("Creating dataset CSV file...")
-        csv_kwargs = {}
-        if args.train_ratio:
-            csv_kwargs['train_ratio'] = args.train_ratio
-        if args.test_ratio:
-            csv_kwargs['test_ratio'] = args.test_ratio
-        if args.validation_ratio:
-            csv_kwargs['validation_ratio'] = args.validation_ratio
-            
-        csv_path = create_song_list(output_directory, **csv_kwargs)
+        # Build split_ratios dictionary
+        split_ratios = {
+            'train': args.train_ratio if args.train_ratio else 0.7,
+            'test': args.test_ratio if args.test_ratio else 0.15,
+            'validation': args.validation_ratio if args.validation_ratio else 0.15
+        }
+
+        csv_path = create_song_list(output_directory, split_ratios=split_ratios)
         
         logger.info("Validating dataset split...")
         validate_dataset_split(csv_path)
