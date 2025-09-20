@@ -131,7 +131,9 @@ class TestAddNoise:
         # Audio should be very similar to original (just normalized)
         noisy_audio, _ = sf.read(output_file)
         original_normalized = self.original_audio / np.max(np.abs(self.original_audio))
-        assert np.allclose(noisy_audio, original_normalized, rtol=1e-5)
+        # With intensity=0, should be very close to normalized original
+        # Use atol instead of rtol for small values
+        assert np.allclose(noisy_audio, original_normalized, atol=1e-4)
 
     def test_apply_noise_high_intensity(self):
         """Test noise addition with very high intensity."""
@@ -174,10 +176,6 @@ class TestAddNoise:
         """Test noise addition with stereo audio."""
         # Create stereo audio file
         stereo_file = os.path.join(self.test_dir, "stereo.wav")
-        left = 0.5 * np.sin(2 * np.pi * 440 * t for t in np.linspace(0, 1, self.sr))
-        right = 0.5 * np.sin(2 * np.pi * 550 * t for t in np.linspace(0, 1, self.sr))
-
-        # Fix the generator expression issue
         t = np.linspace(0, 1, self.sr)
         left = 0.5 * np.sin(2 * np.pi * 440 * t)
         right = 0.5 * np.sin(2 * np.pi * 550 * t)

@@ -35,37 +35,65 @@ def insert_silence(
         Exception: If there's an error loading or writing the audio file
     """
     try:
-        audio, sr = librosa.load(audio_file, sr=None)
+        audio, sr = librosa.load(audio_file, sr=None, mono=False)
         segments = []
 
         if not silence_ranges:
             logger.warning("No silence ranges provided, audio will be unchanged")
-            sf.write(output_file, audio, sr)
+            sf.write(output_file, audio.T if audio.ndim > 1 else audio, sr)
             return
 
-        # Add the start of the audio to the segments list
-        segments.append(audio[: int(silence_ranges[0][0] * sr)])
+        # Handle mono vs stereo
+        if audio.ndim == 1:
+            # Mono audio
+            # Add the start of the audio to the segments list
+            segments.append(audio[: int(silence_ranges[0][0] * sr)])
 
-        # Iterate over the silence_ranges and replace them with silence
-        for i, (start, end) in enumerate(silence_ranges):
-            # start_sample = int(start * sr)  # Unused
-            end_sample = int(end * sr)
+            # Iterate over the silence_ranges and replace them with silence
+            for i, (start, end) in enumerate(silence_ranges):
+                end_sample = int(end * sr)
 
-            silence_duration = end - start
-            silence_samples = int(silence_duration * sr)
-            silence = np.zeros(silence_samples)
+                silence_duration = end - start
+                silence_samples = int(silence_duration * sr)
+                silence = np.zeros(silence_samples)
 
-            segments.append(silence)
+                segments.append(silence)
 
-            # Get the next segment until the next silence range or the end of the audio
-            if i < len(silence_ranges) - 1:
-                next_start_sample = int(silence_ranges[i + 1][0] * sr)
-                segments.append(audio[end_sample:next_start_sample])
-            else:
-                segments.append(audio[end_sample:])
+                # Get the next segment until the next silence range or the end of the audio
+                if i < len(silence_ranges) - 1:
+                    next_start_sample = int(silence_ranges[i + 1][0] * sr)
+                    segments.append(audio[end_sample:next_start_sample])
+                else:
+                    segments.append(audio[end_sample:])
 
-        # Concatenate all segments
-        output_audio = np.concatenate(segments)
+            # Concatenate all segments
+            output_audio = np.concatenate(segments)
+        else:
+            # Stereo audio (shape: [channels, samples])
+            # Add the start of the audio to the segments list
+            segments.append(audio[:, : int(silence_ranges[0][0] * sr)])
+
+            # Iterate over the silence_ranges and replace them with silence
+            for i, (start, end) in enumerate(silence_ranges):
+                end_sample = int(end * sr)
+
+                silence_duration = end - start
+                silence_samples = int(silence_duration * sr)
+                silence = np.zeros((audio.shape[0], silence_samples))
+
+                segments.append(silence)
+
+                # Get the next segment until the next silence range or the end of the audio
+                if i < len(silence_ranges) - 1:
+                    next_start_sample = int(silence_ranges[i + 1][0] * sr)
+                    segments.append(audio[:, end_sample:next_start_sample])
+                else:
+                    segments.append(audio[:, end_sample:])
+
+            # Concatenate all segments
+            output_audio = np.concatenate(segments, axis=1)
+            # Transpose for soundfile (expects [samples, channels])
+            output_audio = output_audio.T
         sf.write(output_file, output_audio, sr)
         logger.debug("Modified audio saved to %s", output_file)
     except Exception as e:

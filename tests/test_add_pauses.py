@@ -48,7 +48,7 @@ class TestAddPauses:
             shutil.rmtree(self.test_dir)
 
     def test_insert_silence_basic(self):
-        """Test basic silence insertion."""
+        """Test basic silence insertion (replacement)."""
         output_file = os.path.join(self.test_dir, "with_silence.wav")
         silence_ranges = [(0.5, 0.8), (1.5, 2.0)]
 
@@ -61,8 +61,8 @@ class TestAddPauses:
         original_audio, sr1 = sf.read(self.audio_file)
         modified_audio, sr2 = sf.read(output_file)
         assert sr1 == sr2
-        # Modified audio should be longer due to inserted silence
-        assert len(modified_audio) > len(original_audio)
+        # Audio length should remain the same (ranges are replaced with silence, not added)
+        assert len(modified_audio) == len(original_audio)
 
     def test_insert_silence_empty_ranges(self):
         """Test silence insertion with empty ranges."""
@@ -84,11 +84,11 @@ class TestAddPauses:
         insert_silence(self.audio_file, silence_ranges, output_file)
 
         assert os.path.exists(output_file)
-        # Total silence added: 0.1 + 0.2 + 0.3 = 0.6 seconds
+        # Ranges are replaced, not added, so length should remain approximately the same
         original_audio, sr = sf.read(self.audio_file)
         modified_audio, _ = sf.read(output_file)
-        expected_added_samples = int(0.6 * sr)
-        assert abs(len(modified_audio) - len(original_audio) - expected_added_samples) < sr * 0.01
+        # Allow small tolerance for rounding
+        assert abs(len(modified_audio) - len(original_audio)) <= 1
 
     def test_remove_silence_ranges_basic(self):
         """Test removal of annotation lines in silence ranges."""
@@ -158,8 +158,8 @@ class TestAddPauses:
         # Check annotation was modified
         with open(output_ann, 'r', encoding='utf-8') as f:
             lines = f.readlines()
-        # The pause between second and third note should be removed
-        assert len(lines) < len(self.ann_lines)
+        # No notes fall within the silence range (1.0-2.2), so all notes should remain
+        assert len(lines) == len(self.ann_lines)
 
     def test_calculate_time_distance_custom_thresholds(self):
         """Test with custom pause thresholds."""

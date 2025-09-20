@@ -7,7 +7,7 @@ import numpy as np
 def apply_noise(audio_file, ann_file, output_file_path, intensity):
     samples, sample_rate = librosa.load(audio_file, sr=None, mono=False)
 
-    noise = np.random.normal(0, 1, samples.size)
+    noise = np.random.normal(0, 1, samples.shape)
 
     # Determine output format based on file extension
     output_format = "WAV" if output_file_path.lower().endswith(".wav") else "FLAC"
@@ -15,6 +15,10 @@ def apply_noise(audio_file, ann_file, output_file_path, intensity):
     # Add noise with intensity scaling and normalize
     noise_audio = samples + noise * intensity
     noise_audio = librosa.util.normalize(noise_audio)
+
+    # Transpose stereo audio for soundfile (expects [samples, channels])
+    if noise_audio.ndim > 1:
+        noise_audio = noise_audio.T
 
     sf.write(
         output_file_path, noise_audio, sample_rate, format=output_format
