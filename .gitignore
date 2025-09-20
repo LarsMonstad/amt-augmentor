@@ -7,6 +7,9 @@ __pycache__/
 *.so
 .DS_Store
 
+#csv files
+.csv
+
 # Distribution / packaging
 .Python
 build/
@@ -143,6 +146,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+pyenv310new/
+test_env/
+test_augmentor_env/
 
 # Spyder project settings
 .spyderproject
@@ -177,3 +183,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+example_dataset

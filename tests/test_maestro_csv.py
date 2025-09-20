@@ -6,7 +6,7 @@ import pytest
 from collections import defaultdict
 
 # Import the functions we wanna test
-from amt_augpy.create_maestro_csv import (
+from amt_augmentor.create_maestro_csv import (
     is_augmented_version,
     get_original_song_name,
     get_split_status,
@@ -22,12 +22,15 @@ from amt_augpy.create_maestro_csv import (
 @pytest.mark.parametrize("filename, expected", [
     ("song.wav", False),
     ("song.mid", False),
-    ("song_timestretch_aug.mid", True),
-    ("song_pitchshift_extra.mid", True),
-    ("song_reverb_filters_test.mid", True),
-    ("song_gain_chorus_final.mid", True),
-    ("song_addpauses_demo.mid", True),
-    ("SONG_PITCHSHIFT_EXTRA.MID", True),  # checking case insensitivity
+    ("song_augmented_timestretch_aug.mid", True),
+    ("song_augmented_pitchshift_extra.mid", True),
+    ("song_augmented_reverb_filters_test.mid", True),
+    ("song_augmented_gain_chorus_final.mid", True),
+    ("song_augmented_addpauses_demo.mid", True),
+    ("SONG_AUGMENTED_PITCHSHIFT_EXTRA.MID", True),  # checking case insensitivity
+    # Also test old format (should not be recognized as augmented anymore)
+    ("song_timestretch_aug.mid", False),
+    ("song_pitchshift_extra.mid", False),
 ])
 def test_is_augmented_version(filename, expected):
     # Let's see if this works as expected...
@@ -36,13 +39,16 @@ def test_is_augmented_version(filename, expected):
 
 # Test extracting the original song name from filenames with augment markers.
 @pytest.mark.parametrize("filename, expected", [
-    ("song_timestretch_aug.mid", "song"),
-    ("song_pitchshift_extra.mid", "song"),
-    ("song_reverb_filters_test.mid", "song"),
-    ("song_gain_chorus_final.mid", "song"),
-    ("song_addpauses_demo.mid", "song"),
+    ("song_augmented_timestretch_aug.mid", "song"),
+    ("song_augmented_pitchshift_extra.mid", "song"),
+    ("song_augmented_reverb_filters_test.mid", "song"),
+    ("song_augmented_gain_chorus_final.mid", "song"),
+    ("song_augmented_addpauses_demo.mid", "song"),
     ("song.mid", "song"),
     ("my.song.mid", "my.song"),
+    # Test that old format returns the full name (no extraction)
+    ("song_timestretch_aug.mid", "song_timestretch_aug"),
+    ("song_pitchshift_extra.mid", "song_pitchshift_extra"),
 ])
 def test_get_original_song_name(filename, expected):
     # Hopefully this returns the right base name...
@@ -101,34 +107,41 @@ def test_create_song_list(tmp_path, monkeypatch):
     """
     data_dir = tmp_path / "test_data"
     data_dir.mkdir()
-    
+
     # Create original song files
     orig_title = "song1"
     orig_mid = data_dir / f"{orig_title}.mid"
     orig_wav = data_dir / f"{orig_title}.wav"
     orig_mid.write_text("dummy midi content")
-    
+
     sr = 22050
     dur = 1.0
     t = np.linspace(0, dur, int(sr * dur), endpoint=False)
     y = 0.5 * np.sin(2 * np.pi * 220 * t)
     sf.write(str(orig_wav), y, sr)
-    
+
     # Create an augmented version
     aug_mid = data_dir / f"{orig_title}_timestretch_aug.mid"
     aug_wav = data_dir / f"{orig_title}_timestretch_aug.wav"
     aug_mid.write_text("dummy augmented midi content")
-    
+
     dur_aug = 1.2  # slightly different duration
     t_aug = np.linspace(0, dur_aug, int(sr * dur_aug), endpoint=False)
     y_aug = 0.5 * np.sin(2 * np.pi * 330 * t_aug)
     sf.write(str(aug_wav), y_aug, sr)
-    
-    # Change directory so the CSV gets written to tmp_path
-    monkeypatch.chdir(tmp_path)
-    
-    # Run our CSV creation function
-    create_song_list(str(data_dir), {'train': 0.7, 'test': 0.15, 'validation': 0.15})
+
+    # Save the current directory to restore later
+    original_cwd = os.getcwd()
+
+    try:
+        # Change directory so the CSV gets written to tmp_path
+        monkeypatch.chdir(tmp_path)
+
+        # Run our CSV creation function
+        create_song_list(str(data_dir), {'train': 0.7, 'test': 0.15, 'validation': 0.15})
+    finally:
+        # Make sure we restore the original directory
+        os.chdir(original_cwd)
     
     csv_filename = f"{data_dir.name}.csv"
     csv_file = tmp_path / csv_filename

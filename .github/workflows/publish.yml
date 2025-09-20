@@ -1,4 +1,4 @@
-name: Publish amt-augpy1.0 to PyPI
+name: Publish AMT-Augmentor to PyPI
 
 on:
   push:

@@ -3,12 +3,12 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "amt-augpy1.0"
-version = "1.0.8"
+name = "amt-augmentor"
+version = "1.0.9"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
-description = "Python augmentation toolkit for Automatic Music Transcription datasets"
+description = "Audio + MIDI paired augmentation toolkit for Automatic Music Transcription (AMT)"
 readme = "README.md"
 requires-python = ">=3.8, <3.12"
 classifiers = [
@@ -30,8 +30,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/LarsMonstad/amt-augpy"
-Issues = "https://github.com/LarsMonstad/amt-augpy/issues"
+Homepage = "https://github.com/LarsMonstad/amt-augmentor"
+Issues = "https://github.com/LarsMonstad/amt-augmentor/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -45,4 +45,9 @@ dev = [
 ]
 
 [project.scripts]
-amt-augpy = "amt_augpy.main:main"
+amt-augmentor = "amt_augmentor.main:main"
+amt-augpy = "amt_augmentor.main:main"  # temporary alias for backwards compatibility
+
+[tool.setuptools.packages.find]
+include = ["amt_augmentor*", "amt_augpy*"]
+exclude = ["test_env*", "venv*", "*.egg-info"]

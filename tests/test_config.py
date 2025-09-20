@@ -7,7 +7,7 @@ import tempfile
 import pytest
 import yaml
 
-from amt_augpy.config import (
+from amt_augmentor.config import (
     Config,
     TimeStretchConfig,
     PitchShiftConfig,

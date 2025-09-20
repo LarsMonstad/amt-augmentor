@@ -7,7 +7,7 @@ import pytest
 import pretty_midi
 
 # Import the functions to test from your main module
-from amt_augpy.main import (
+from amt_augmentor.main import (
     random_word,
     generate_output_filename,
     delete_file,
@@ -35,7 +35,7 @@ def test_generate_output_filename():
     random_suffix = "abcde"
     extension = ".wav"
     result = generate_output_filename(base_name, effect_name, measure, random_suffix, extension)
-    expected = "audio_pitchshift_1.2_abcde.wav"
+    expected = "audio_augmented_pitchshift_1.2_abcde.wav"
     assert result == expected
 
 

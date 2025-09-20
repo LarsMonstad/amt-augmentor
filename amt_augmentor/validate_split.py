@@ -3,22 +3,20 @@ import os
 import argparse
 from collections import defaultdict
 
+
 def is_augmented_version(filename):
-    """Check if the file is an augmented version based on common augmentation keywords"""
-    aug_keywords = ['timestretch', 'pitchshift', 'reverb_filters', 
-                   'gain_chorus', 'addpauses']
-    return any(keyword in filename.lower() for keyword in aug_keywords)
+    """Check if the file is an augmented version based on the '_augmented_' identifier"""
+    return '_augmented_' in filename.lower()
+
 
 def get_original_song_name(filename):
     """Extract original song name from augmented filename"""
     base_name = os.path.splitext(filename)[0]
-    aug_markers = ['_timestretch_', '_pitchshift_', '_reverb_filters_', 
-                  '_gain_chorus_', '_addpauses_']
-    
-    for marker in aug_markers:
-        if marker in base_name:
-            return base_name.split(marker)[0]
+    # If the file has the _augmented_ marker, extract the original name
+    if '_augmented_' in base_name:
+        return base_name.split('_augmented_')[0]
     return base_name
+
 
 def validate_dataset_split(csv_file):
     # Store songs by split
@@ -28,20 +26,20 @@ def validate_dataset_split(csv_file):
     issues_found = False
 
     print(f"\nValidating dataset split in {csv_file}...")
-    
-    with open(csv_file, 'r', encoding='utf-8') as f:
+
+    with open(csv_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            midi_file = os.path.basename(row['midi_filename'])
-            split = row['split']
+            midi_file = os.path.basename(row["midi_filename"])
+            split = row["split"]
             is_augmented = is_augmented_version(midi_file)
-            
+
             if is_augmented:
                 original_name = get_original_song_name(midi_file)
                 augmented_songs[split].append((midi_file, original_name))
             else:
-                original_songs[split].add(midi_file.replace('.mid', ''))
-            
+                original_songs[split].add(midi_file.replace(".mid", ""))
+
             split_songs[split].append(midi_file)
 
     print("\n1. Basic Split Statistics:")
@@ -55,7 +53,7 @@ def validate_dataset_split(csv_file):
 
     print("\n2. Checking for Augmented Songs in Test/Validation:")
     print("-" * 50)
-    for split in ['test', 'validation']:
+    for split in ["test", "validation"]:
         aug_in_split = [s for s in split_songs[split] if is_augmented_version(s)]
         if aug_in_split:
             issues_found = True
@@ -70,7 +68,7 @@ def validate_dataset_split(csv_file):
     # Check each augmented song to ensure its original isn't in test/validation
     for split, aug_list in augmented_songs.items():
         for aug_file, original_name in aug_list:
-            for check_split in ['test', 'validation']:
+            for check_split in ["test", "validation"]:
                 if original_name in original_songs[check_split]:
                     issues_found = True
                     print(f"ERROR: Song contamination detected!")
@@ -84,9 +82,10 @@ def validate_dataset_split(csv_file):
     else:
         print("\nValidation FAILED: Issues were found in the dataset split!")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Validate dataset split in CSV file')
-    parser.add_argument('csv_file', type=str, help='Path to the CSV file')
-    
+    parser = argparse.ArgumentParser(description="Validate dataset split in CSV file")
+    parser.add_argument("csv_file", type=str, help="Path to the CSV file")
+
     args = parser.parse_args()
     validate_dataset_split(args.csv_file)
