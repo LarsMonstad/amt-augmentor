@@ -120,9 +120,9 @@ def test_create_song_list(tmp_path, monkeypatch):
     y = 0.5 * np.sin(2 * np.pi * 220 * t)
     sf.write(str(orig_wav), y, sr)
 
-    # Create an augmented version
-    aug_mid = data_dir / f"{orig_title}_timestretch_aug.mid"
-    aug_wav = data_dir / f"{orig_title}_timestretch_aug.wav"
+    # Create an augmented version with new naming convention
+    aug_mid = data_dir / f"{orig_title}_augmented_timestretch_aug.mid"
+    aug_wav = data_dir / f"{orig_title}_augmented_timestretch_aug.wav"
     aug_mid.write_text("dummy augmented midi content")
 
     dur_aug = 1.2  # slightly different duration

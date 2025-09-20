@@ -64,13 +64,13 @@ class TestTimeStretch:
         # Test stretch factor 2.0 (double the time)
         updated = update_ann_file(ann_content, 2.0)
         assert len(updated) == 2
-        assert updated[0] == "1.0\t2.0\t60\t100"
-        assert updated[1] == "3.0\t4.0\t62\t100"
+        assert updated[0] == "1.000\t2.000\t60\t100"
+        assert updated[1] == "3.000\t4.000\t62\t100"
 
         # Test stretch factor 0.5 (half the time)
         updated = update_ann_file(ann_content, 0.5)
-        assert updated[0] == "0.25\t0.5\t60\t100"
-        assert updated[1] == "0.75\t1.0\t62\t100"
+        assert updated[0] == "0.250\t0.500\t60\t100"
+        assert updated[1] == "0.750\t1.000\t62\t100"
 
     def test_apply_time_stretch(self):
         """Test the main time stretch function."""
