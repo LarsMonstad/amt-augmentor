@@ -520,13 +520,13 @@ def process_effect(
                     logger.error("Error applying gain and chorus: %s", e)
 
         elif effect_type == "merge" and config.merge_audio.enabled:
-            target_audio_files: list[str] = [
+            target_audio_files: List[str] = [
                 x
                 for x in grab_audios(input_directory)
                 if os.path.basename(standardized_audio) not in x
             ]
             if len(target_audio_files) >= config.merge_audio.merge_num:
-                audios4merge: list[str] = list()
+                audios4merge: List[str] = list()
                 while len(audios4merge) < config.merge_audio.merge_num:
                     audios4merge.append(
                         target_audio_files.pop(
