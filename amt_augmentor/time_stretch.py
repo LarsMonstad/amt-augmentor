@@ -22,6 +22,9 @@ def update_ann_file(ann_content, stretch_factor):
     updated_content = []
     for line in ann_content:
         parts = line.strip().split("\t")
+        if len(parts) != 4:
+            # Skip malformed lines
+            continue
         onset, offset, pitch, channel = parts
         onset_new = float(onset) / stretch_factor
         offset_new = float(offset) / stretch_factor

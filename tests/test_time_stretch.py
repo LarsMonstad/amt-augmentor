@@ -133,4 +133,4 @@ class TestTimeStretch:
 
         # update_ann_file should handle bad lines gracefully
         updated = update_ann_file(lines, 2.0)
-        assert len(updated) == 3  # Should process what it can
+        assert len(updated) == 1  # Should only process valid lines (only first line has 4 fields)
