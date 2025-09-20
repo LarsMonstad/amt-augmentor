@@ -149,6 +149,7 @@ venv.bak/
 pyenv310new/
 test_env/
 test_augmentor_env/
+test_py38_env/
 
 # Spyder project settings
 .spyderproject

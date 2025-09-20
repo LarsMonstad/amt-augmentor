@@ -272,7 +272,7 @@ def process_effect(
             min_factor: int = config.time_stretch.min_factor
             max_factor: int = config.time_stretch.max_factor
 
-            generated_factors: set[int] = set()
+            generated_factors: Set[int] = set()
             if config.time_stretch.randomized:
                 for i in range(variations):
                     stretch_factor = 1.0
@@ -338,7 +338,7 @@ def process_effect(
             min_semitones: int = config.pitch_shift.min_semitones
             max_semitones: int = config.pitch_shift.max_semitones
 
-            generated_semitones: set[int] = set()
+            generated_semitones: Set[int] = set()
             if config.pitch_shift.randomized:
                 for i in range(variations):
                     semitones = 0
@@ -571,7 +571,7 @@ def process_effect(
             min_intensity: int = config.add_noise.min_intensity
             max_intensity: int = config.add_noise.max_intensity
 
-            generated_intensities: set[int] = set()
+            generated_intensities: Set[int] = set()
             if config.add_noise.randomized:
                 for i in range(variations):
                     intensity = 1.0
