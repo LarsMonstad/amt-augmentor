@@ -44,24 +44,6 @@ dataset/
 - **Dataset Validation**: Automatic validation of train/test/validation splits
 - **MAESTRO Compatibility**: Dataset format compatible with MAESTRO v3.0.0
 
-## What's New in 1.0.9
-
-- **Noise Augmentation**: Added support for adding controlled noise to audio files (contributed by @monoamine11231)
-- **Unified Augmentation Naming**: All augmented files now use `_augmented_` prefix for consistent identification
-- **Enhanced CLI Commands**: New commands including `--version`, `--list-effects`, `--dry-run`, `--verbose`, and `--check-pairs`
-- **Custom Test Songs**: Ability to force specific songs into test set using `--custom-test-songs` (contributed by @monoamine11231)
-- **Improved Test Coverage**: Comprehensive test suite for all audio transformation modules (76% coverage)
-- **Bug Fixes**: Fixed context manager issues in distortionchorus module and improved error handling
-
-## What's New in 1.0.5
-
-- **Configuration System**: Use YAML configuration files to customize all parameters
-- **Parallel Processing**: Process multiple effects concurrently for faster performance
-- **Better Error Handling**: Improved error detection and reporting
-- **Extended Format Support**: Added support for M4A and AIFF audio formats
-- **Type Annotations**: Full Python type hints for better code quality
-- **Expanded Documentation**: Improved documentation and examples
-
 ## Installation
 
 You can install AMT-Augmentor either via pip or by cloning the repository:
