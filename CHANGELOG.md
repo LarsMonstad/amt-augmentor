@@ -2,7 +2,41 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
-## [1.0.9] - 2024
+## [1.1.0] - 2025-09-25
+
+### Added
+- Dataset modification commands integrated into main CLI:
+  - `--modify-csv` to modify existing dataset CSV files
+  - `--list-split` to list songs in specific splits
+  - `--move-to-split` to move songs between train/test/validation
+  - `--remove-songs` to remove songs from dataset
+  - `--song-patterns` for pattern matching when modifying datasets
+  - `--backup` flag to create backups (off by default)
+- Audio merge feature for combining multiple audio files
+- `--seed` flag for reproducible augmentation parameters
+- `tabulate` dependency for formatted table output
+- PyPI and CI status badges to README
+- Multi-OS CI testing (Linux, macOS, Windows)
+- Python 3.12 support
+
+### Fixed
+- Merge audio filenames now include `_augmented_` marker to prevent test/validation contamination
+- `gain_chorus` effect now respects `config.enable_random_suffix` setting (was always adding random suffix)
+- Consistent file naming across all augmentation effects
+- PyPI metadata now correctly shows MIT license
+
+### Changed
+- Backup creation for dataset modification is now opt-in (use `--backup` flag)
+- Updated Python requirement to >=3.9 (dropped 3.8 support)
+- Added upper bounds to all dependencies for stability
+- Improved CI/CD workflow with matrix testing
+- Enhanced package metadata with proper classifiers
+
+### Removed
+- Legacy `amt_augpy` directory and references
+- `amt-augpy` console script alias
+
+## [1.0.9] - 2025
 
 ### Changed
 - Renamed package from `amt-augpy` to `amt-augmentor`
@@ -21,7 +55,7 @@ All notable changes to AMT-Augmentor will be documented in this file.
 - Stereo audio handling in add_noise and add_pauses modules
 - Time stretching annotation scaling
 
-## [1.0.5] - 2024
+## [1.0.5] - 2025
 
 ### Added
 - YAML configuration system for parameter customization
@@ -34,7 +68,7 @@ All notable changes to AMT-Augmentor will be documented in this file.
 - Error detection and reporting
 - Processing performance
 
-## [1.0.0] - 2024
+## [1.0.0] - 2025
 
 ### Initial Release
 - Time stretching augmentation

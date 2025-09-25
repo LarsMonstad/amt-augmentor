@@ -4,29 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amt-augmentor"
-version = "1.0.9"
+version = "1.1.0"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
 description = "Audio + MIDI paired augmentation toolkit for Automatic Music Transcription (AMT)"
 readme = "README.md"
-requires-python = ">=3.8, <3.12"
+requires-python = ">=3.9"
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
 license = { file = "LICENSE" }
 dependencies = [
-    "librosa>=0.9.1,<1.0.0",
+    "librosa>=0.9.1,<0.12.0",
     "numpy>=1.23.5,<2.0.0",
-    "soundfile>=0.12.1",
-    "pedalboard>=0.7.3",
-    "pretty_midi>=0.2.10",
-    "tqdm>=4.64.1",
-    "numba>=0.56.4",
-    "llvmlite>=0.39.1",
-    "pyyaml>=5.1.0"
+    "soundfile>=0.12.1,<0.14.0",
+    "pedalboard>=0.7.3,<1.0.0",
+    "pretty_midi>=0.2.10,<0.3.0",
+    "tqdm>=4.64.1,<5.0.0",
+    "numba>=0.56.4,<0.63.0",
+    "llvmlite>=0.39.1,<0.46.0",
+    "pyyaml>=5.1.0,<7.0.0",
+    "tabulate>=0.9.0,<1.0.0"
 ]
 
 [project.urls]
@@ -46,8 +54,7 @@ dev = [
 
 [project.scripts]
 amt-augmentor = "amt_augmentor.main:main"
-amt-augpy = "amt_augmentor.main:main"  # temporary alias for backwards compatibility
 
 [tool.setuptools.packages.find]
-include = ["amt_augmentor*", "amt_augpy*"]
-exclude = ["test_env*", "venv*", "*.egg-info"]
+include = ["amt_augmentor*"]
+exclude = ["tests*", "test_env*", "venv*", "*.egg-info"]

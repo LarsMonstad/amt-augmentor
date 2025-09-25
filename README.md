@@ -7,15 +7,16 @@
 
   **Developed by [Bots for Music](https://botsformusic.com), maintained by Lars Monstad**
 
-  [![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11-blue.svg)](https://www.python.org)
+  [![PyPI version](https://badge.fury.io/py/amt-augmentor.svg)](https://badge.fury.io/py/amt-augmentor)
+  [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Librosa](https://img.shields.io/badge/librosa-0.9-green.svg)](https://librosa.org/)
-  [![NumPy](https://img.shields.io/badge/numpy-1.23-blue.svg)](https://numpy.org)
-  [![SoundFile](https://img.shields.io/badge/soundfile-0.12%2B-red.svg)](https://python-soundfile.readthedocs.io/)
+  [![CI](https://github.com/LarsMonstad/amt-augmentor/actions/workflows/ci.yml/badge.svg)](https://github.com/LarsMonstad/amt-augmentor/actions/workflows/ci.yml)
+  [![Downloads](https://pepy.tech/badge/amt-augmentor)](https://pepy.tech/project/amt-augmentor)
 </div>
 
-> **Note:** Formerly known as `amt-augpy1.0` (a.k.a. `amt-augpy`).
-> Starting with v1.0.9 the package is published on PyPI as **`amt-augmentor`** and the import path is **`amt_augmentor`**.
+> **📦 [View on PyPI](https://pypi.org/project/amt-augmentor/)** | **🐙 [View on GitHub](https://github.com/LarsMonstad/amt-augmentor)**
+>
+> **Note:** Formerly known as `amt-augpy`. Starting with v1.0.9, the package is **`amt-augmentor`**.
 
 A Python toolkit for augmenting Automatic Music Transcription (AMT) datasets through various audio transformations while maintaining synchronization between audio and MIDI files. The dataset follows the same format as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro), which is commonly used for Automatic Music Transcription (AMT) tasks. 
 
@@ -43,6 +44,10 @@ dataset/
 - **Configuration System**: YAML-based parameter customization
 - **Dataset Validation**: Automatic validation of train/test/validation splits
 - **MAESTRO Compatibility**: Dataset format compatible with MAESTRO v3.0.0
+
+## Why AMT-Augmentor?
+
+Built for AMT, not just audio. Unlike general audio augmenters, AMT-Augmentor keeps paired audio+MIDI aligned by applying transform-consistent updates to MIDI (transpose for pitch shift, time-scale for stretch) and ships MAESTRO-style dataset tools (CSV builder + split validation) to avoid leakage. It also supports semitone/time-aware transforms and reproducible runs via --seed.
 
 ## Installation
 
@@ -96,6 +101,9 @@ This will process all compatible audio files in the directory and their correspo
 ```bash
 # Use a custom configuration file
 amt-augmentor /path/to/dataset/directory --config my_config.yaml
+
+# Set random seed for reproducible augmentation
+amt-augmentor /path/to/dataset/directory --seed 42
 
 # Specify an output directory
 amt-augmentor /path/to/dataset/directory --output-directory /path/to/output
@@ -224,12 +232,41 @@ Dataset split validation is automatically performed after CSV creation to ensure
 
 The generated CSV follows the MAESTRO format with the following columns:
 - canonical_composer
-- canonical_title 
+- canonical_title
 - split
 - year
 - midi_filename
 - audio_filename
 - duration
+
+### Modifying Existing Datasets
+
+After creating a dataset CSV, you can easily modify it to adjust train/test/validation splits:
+
+```bash
+# List all songs and their distribution
+amt-augmentor --modify-csv dataset.csv --list-split all
+
+# List only test songs
+amt-augmentor --modify-csv dataset.csv --list-split test
+
+# List all songs with detailed view
+amt-augmentor --modify-csv dataset.csv --list-split all --verbose
+
+# Move songs to a different split (substring matching)
+amt-augmentor --modify-csv dataset.csv --move-to-split test --song-patterns "Mozart,Chopin"
+
+# Remove songs from dataset
+amt-augmentor --modify-csv dataset.csv --remove-songs --song-patterns "BadRecording1,BadRecording2"
+
+# Create backup before modifications (off by default)
+amt-augmentor --modify-csv dataset.csv --move-to-split validation --song-patterns "Bach" --backup
+```
+
+**Features:**
+- **Substring matching**: Patterns like "Mozart" match any song containing that substring
+- **Smart augmented handling**: Augmented versions automatically stay in train split only
+- **Backup option**: Use `--backup` to create a backup before modifications
 
 ## Contributing
 
@@ -265,7 +302,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {1.0.9},
+  version      = {1.1.0},
   year         = {2025},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

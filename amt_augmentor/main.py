@@ -496,7 +496,7 @@ def process_effect(
                 generated_gains.add(gain)
 
                 chorus_rate = random.choice(chorus_rates)
-                random_suffix = random_word(5)
+                random_suffix: str = random_word(5) if config.enable_random_suffix else ''
                 output_filename = generate_output_filename(
                     audio_base, "gain_chorus", gain, random_suffix, audio_ext
                 )
@@ -534,15 +534,13 @@ def process_effect(
                         )
                     )
 
-                output_filename: str = (
-                    "_".join(
-                        [
-                            x.rsplit(".", 1)[0]
-                            for x in audios4merge
-                            + [os.path.basename(standardized_audio)]
-                        ]
-                    )
-                    + "_merged"
+                random_suffix: str = random_word(5) if config.enable_random_suffix else ''
+                # Create a descriptive name showing which files were merged
+                merge_descriptor = "_".join([x.rsplit(".", 1)[0] for x in audios4merge[:2]])
+                if len(audios4merge) > 2:
+                    merge_descriptor += f"_and_{len(audios4merge)-2}_more"
+                output_filename = generate_output_filename(
+                    audio_base, f"merge_{merge_descriptor}", 1, random_suffix, audio_ext
                 )
                 try:
                     ann_file = merge_audios(
@@ -915,6 +913,39 @@ def main() -> None:
         help="Comma-separated list of song names to force as test (originals only, no augmented versions)"
     )
 
+    # Dataset modification options
+    parser.add_argument(
+        "--modify-csv",
+        type=str,
+        metavar="CSV_PATH",
+        help="Modify an existing dataset CSV file instead of processing audio"
+    )
+    parser.add_argument(
+        "--list-split",
+        choices=["all", "train", "test", "validation"],
+        help="List songs in specified split from the CSV (use with --modify-csv)"
+    )
+    parser.add_argument(
+        "--move-to-split",
+        choices=["train", "test", "validation"],
+        help="Move songs to specified split (use with --modify-csv and --song-patterns)"
+    )
+    parser.add_argument(
+        "--song-patterns",
+        type=str,
+        help="Comma-separated patterns to match songs (use with --modify-csv operations)"
+    )
+    parser.add_argument(
+        "--remove-songs",
+        action="store_true",
+        help="Remove matched songs from dataset (use with --modify-csv and --song-patterns)"
+    )
+    parser.add_argument(
+        "--backup",
+        action="store_true",
+        help="Create backup of CSV before modification (use with --modify-csv)"
+    )
+
     # Additional utility options
     parser.add_argument(
         "--dry-run",
@@ -936,8 +967,156 @@ def main() -> None:
         action="store_true",
         help="Check for matching audio/MIDI pairs and exit without processing"
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Random seed for reproducible augmentation parameters"
+    )
 
     args = parser.parse_args()
+
+    # Set random seed if provided for reproducibility
+    if args.seed is not None:
+        import numpy as np
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        logger.info(f"Random seed set to {args.seed} for reproducibility")
+
+    # Handle dataset modification mode
+    if args.modify_csv:
+        from amt_augmentor.dataset_modifier import (
+            load_dataset, save_dataset, get_original_songs
+        )
+        from tabulate import tabulate
+        from collections import defaultdict
+
+        csv_path = args.modify_csv
+
+        # Load the dataset
+        rows, headers = load_dataset(csv_path)
+
+        # Handle list operation
+        if args.list_split:
+            original_songs = get_original_songs(rows)
+            splits = defaultdict(list)
+            for title, info in original_songs.items():
+                splits[info['split']].append(title)
+
+            if args.list_split == "all":
+                # Show overview
+                total = len(original_songs)
+                print(f"\nDataset Overview (Total: {total} original songs)")
+                print("=" * 60)
+
+                summary_data = []
+                for split in ['train', 'validation', 'test']:
+                    if split in splits:
+                        count = len(splits[split])
+                        percentage = (count / total * 100) if total > 0 else 0
+                        summary_data.append([split.upper(), count, f"{percentage:.1f}%"])
+
+                print(tabulate(summary_data, headers=['Split', 'Count', 'Percentage'], tablefmt='grid'))
+
+                if args.verbose:
+                    for split in ['train', 'validation', 'test']:
+                        if split in splits:
+                            print(f"\n{split.upper()} Split:")
+                            print("-" * 50)
+                            for i, song in enumerate(sorted(splits[split]), 1):
+                                print(f"{i:3d}. {song}")
+            else:
+                # Show specific split
+                split = args.list_split
+                if split not in splits:
+                    print(f"No songs in '{split}' split")
+                else:
+                    print(f"\n{split.upper()} Split ({len(splits[split])} songs):")
+                    print("-" * 50)
+                    for i, song in enumerate(sorted(splits[split]), 1):
+                        print(f"{i:3d}. {song}")
+            return
+
+        # Handle move operation
+        if args.move_to_split and args.song_patterns:
+            patterns = [p.strip() for p in args.song_patterns.split(',')]
+            target_split = args.move_to_split
+
+            moved_songs = []
+            for row in rows:
+                title = row['canonical_title']
+                is_augmented = '_augmented_' in row['midi_filename']
+
+                # Check if matches pattern
+                base_title = title.split('_augmented_')[0] if is_augmented else title
+                matches = any(pattern.lower() in base_title.lower() for pattern in patterns)
+
+                if matches:
+                    if not is_augmented:
+                        # Move original
+                        if row['split'] != target_split:
+                            moved_songs.append((title, row['split'], target_split))
+                            row['split'] = target_split
+                    else:
+                        # Augmented versions should only be in train
+                        if target_split == 'train':
+                            row['split'] = 'train'
+                        elif row['split'] != 'train':
+                            # Move augmented back to train if it's elsewhere
+                            row['split'] = 'train'
+
+            if moved_songs:
+                print(f"\nMoved {len(moved_songs)} songs to {target_split}:")
+                for song, from_split, to_split in moved_songs:
+                    print(f"  {song}: {from_split} -> {to_split}")
+
+                save_dataset(csv_path, rows, headers, backup=args.backup)
+                print(f"\nDataset updated: {csv_path}")
+            else:
+                print("No songs matched the specified patterns.")
+            return
+
+        # Handle remove operation
+        if args.remove_songs and args.song_patterns:
+            patterns = [p.strip() for p in args.song_patterns.split(',')]
+
+            # Identify songs to remove
+            removed_songs = set()
+            for row in rows:
+                title = row['canonical_title']
+                base_title = title.split('_augmented_')[0] if '_augmented_' in title else title
+
+                if any(pattern.lower() in base_title.lower() for pattern in patterns):
+                    removed_songs.add(base_title)
+
+            if removed_songs:
+                # Filter out removed songs
+                filtered_rows = []
+                removed_count = 0
+                for row in rows:
+                    title = row['canonical_title']
+                    base_title = title.split('_augmented_')[0] if '_augmented_' in title else title
+
+                    if base_title not in removed_songs:
+                        filtered_rows.append(row)
+                    else:
+                        removed_count += 1
+
+                print(f"\nRemoved {len(removed_songs)} songs ({removed_count} total rows):")
+                for song in sorted(removed_songs):
+                    print(f"  - {song}")
+
+                save_dataset(csv_path, filtered_rows, headers, backup=True)
+                print(f"\nDataset updated: {csv_path}")
+            else:
+                print("No songs matched the specified patterns.")
+            return
+
+        # If modify-csv is specified but no operation, show help
+        print("Error: --modify-csv requires an operation:")
+        print("  --list-split [all|train|test|validation]  : List songs")
+        print("  --move-to-split <split> --song-patterns <patterns> : Move songs")
+        print("  --remove-songs --song-patterns <patterns> : Remove songs")
+        return
 
     # Handle list-effects command
     if args.list_effects:
@@ -970,10 +1149,14 @@ def main() -> None:
             logger.error("Failed to generate configuration file: %s", e)
             sys.exit(1)
 
-    # Check that input directory exists
-    if not os.path.isdir(args.input_directory):
-        logger.error("Input directory not found: %s", args.input_directory)
-        sys.exit(1)
+    # Check that input directory exists (only if not in modify-csv mode)
+    if not args.modify_csv:
+        if not args.input_directory:
+            logger.error("Input directory is required when not using --modify-csv")
+            sys.exit(1)
+        if not os.path.isdir(args.input_directory):
+            logger.error("Input directory not found: %s", args.input_directory)
+            sys.exit(1)
 
     # Handle check-pairs command
     if args.check_pairs:
