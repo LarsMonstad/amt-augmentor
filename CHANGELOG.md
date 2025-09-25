@@ -17,7 +17,6 @@ All notable changes to AMT-Augmentor will be documented in this file.
 - `tabulate` dependency for formatted table output
 - PyPI and CI status badges to README
 - Multi-OS CI testing (Linux, macOS, Windows)
-- Python 3.12 support
 
 ### Fixed
 - Merge audio filenames now include `_augmented_` marker to prevent test/validation contamination
@@ -28,9 +27,11 @@ All notable changes to AMT-Augmentor will be documented in this file.
 ### Changed
 - Backup creation for dataset modification is now opt-in (use `--backup` flag)
 - Updated Python requirement to >=3.9 (dropped 3.8 support)
+- Added Python 3.12 and 3.13 support (with setuptools dependency for pretty_midi compatibility)
 - Added upper bounds to all dependencies for stability
-- Improved CI/CD workflow with matrix testing
+- Improved CI/CD workflow with matrix testing across Python 3.9-3.13
 - Enhanced package metadata with proper classifiers
+- Fixed Windows test failures with proper temporary file handling
 
 ### Removed
 - Legacy `amt_augpy` directory and references
