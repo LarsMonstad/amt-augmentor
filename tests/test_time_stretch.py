@@ -62,15 +62,17 @@ class TestTimeStretch:
         ann_content = ["0.5\t1.0\t60\t100", "1.5\t2.0\t62\t100"]
 
         # Test stretch factor 2.0 (2x faster = shorter audio)
+        # When audio plays 2x faster, timestamps should be divided by 2
         updated = update_ann_file(ann_content, 2.0)
         assert len(updated) == 2
-        assert updated[0] == "1.000\t2.000\t60\t100"
-        assert updated[1] == "3.000\t4.000\t62\t100"
-
-        # Test stretch factor 0.5 (50% slower = longer audio)
-        updated = update_ann_file(ann_content, 0.5)
         assert updated[0] == "0.250\t0.500\t60\t100"
         assert updated[1] == "0.750\t1.000\t62\t100"
+
+        # Test stretch factor 0.5 (50% speed = 2x slower = longer audio)
+        # When audio plays at 0.5x speed, timestamps should be divided by 0.5 (= multiplied by 2)
+        updated = update_ann_file(ann_content, 0.5)
+        assert updated[0] == "1.000\t2.000\t60\t100"
+        assert updated[1] == "3.000\t4.000\t62\t100"
 
     def test_apply_time_stretch(self):
         """Test the main time stretch function."""
@@ -102,10 +104,10 @@ class TestTimeStretch:
         # Check annotation was updated
         with open(output_ann, 'r', encoding='utf-8') as f:
             lines = f.readlines()
-        # First note should start at 0.1 * 1.5 = 0.15
+        # First note should start at 0.1 / 1.5 ≈ 0.0667 (audio is 1.5x faster, so shorter)
         first_note = lines[0].strip().split('\t')
-        assert float(first_note[0]) == pytest.approx(0.15, rel=0.01)
-        assert float(first_note[1]) == pytest.approx(0.75, rel=0.01)
+        assert float(first_note[0]) == pytest.approx(0.1 / 1.5, rel=0.01)
+        assert float(first_note[1]) == pytest.approx(0.5 / 1.5, rel=0.01)
 
     def test_apply_time_stretch_extreme_values(self):
         """Test time stretch with extreme stretch factors."""

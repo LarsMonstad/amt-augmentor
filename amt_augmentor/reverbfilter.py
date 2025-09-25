@@ -95,7 +95,7 @@ def apply_reverb_and_filters(
 
         # Process audio
         logger.info(
-            f"Applying reverb (room_size={room_size}) and filters (LP={low_cutoff}Hz, HP={high_cutoff}Hz)"
+            f"Applying reverb (room_size={room_size}) and filters (HP={low_cutoff}Hz, LP={high_cutoff}Hz)"
         )
 
         try:
@@ -104,12 +104,17 @@ def apply_reverb_and_filters(
                 samplerate = input_file.samplerate
 
             # Create effects chain
+            # Use a moderate wet_level that scales with room_size but stays audible
+            # Minimum 0.2, maximum 0.5 to ensure reverb is always noticeable
+            wet_level = 0.2 + (room_size / 100.0) * 0.3  # Range from 0.2 to 0.5
             reverb_effect = Reverb(
-                room_size=room_size / 100.0, wet_level=room_size / 100.0
+                room_size=room_size / 100.0, wet_level=wet_level
             )
-            low_pass_filter = LowpassFilter(cutoff_frequency_hz=low_cutoff)
-            high_pass_filter = HighpassFilter(cutoff_frequency_hz=high_cutoff)
-            pedalboard = Pedalboard([reverb_effect, low_pass_filter, high_pass_filter])
+            # IMPORTANT: The cutoff pairs are (low_freq, high_freq) for the frequency range to KEEP
+            # So we need HighpassFilter for low_cutoff (keep above) and LowpassFilter for high_cutoff (keep below)
+            high_pass_filter = HighpassFilter(cutoff_frequency_hz=low_cutoff)  # Keep frequencies above low_cutoff
+            low_pass_filter = LowpassFilter(cutoff_frequency_hz=high_cutoff)    # Keep frequencies below high_cutoff
+            pedalboard = Pedalboard([reverb_effect, high_pass_filter, low_pass_filter])
 
             # Apply effects
             processed_audio = pedalboard(audio, samplerate)

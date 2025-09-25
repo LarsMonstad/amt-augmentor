@@ -26,8 +26,10 @@ def update_ann_file(ann_content, stretch_factor):
             # Skip malformed lines
             continue
         onset, offset, pitch, channel = parts
-        onset_new = float(onset) * stretch_factor
-        offset_new = float(offset) * stretch_factor
+        # When audio is stretched by a factor (e.g., 1.2x = 20% faster),
+        # the timestamps need to be divided by that factor to stay in sync
+        onset_new = float(onset) / stretch_factor
+        offset_new = float(offset) / stretch_factor
         updated_line = f"{onset_new:.3f}\t{offset_new:.3f}\t{pitch}\t{channel}"
         updated_content.append(updated_line)
     return updated_content

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/BotsForMusic_Logo_Black_2.png" alt="Bots for Music Logo" width="300">
+  <img src="https://raw.githubusercontent.com/LarsMonstad/amt-augmentor/refs/heads/main/images/BotsForMusic_Logo_Black_2.png" alt="Bots for Music Logo" width="300">
 
   # AMT-Augmentor
 
@@ -270,7 +270,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {1.1.1},
+  version      = {1.1.2},
   year         = {2025},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

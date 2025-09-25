@@ -2,6 +2,18 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Fixed critical time stretch bug where MIDI annotations were scaled incorrectly (multiplied instead of divided by stretch factor)
+- Fixed double file extension bug in merge audio effect (files were incorrectly named as `.wav.wav` and `.wav.mid`)
+- Fixed merge effect to only use original files for merging, not augmented versions (was causing "file not found" errors)
+- Fixed CRITICAL reverb filter bug where high-pass and low-pass filters were swapped, causing near-silent output
+- Fixed noise effect being way too loud by reducing intensity range from 0.1-3.0 to 0.005-0.05
+- Fixed noise effect type casting bug that was converting all float intensities to 0 (int cast issue)
+- Fixed noise effect using np.logspace incorrectly for non-randomized mode (changed to np.linspace)
+- Fixed pitch shift effect not running due to incorrect indentation (for loop was inside else block)
+
 ## [1.1.0] - 2025-09-25
 
 ### Added

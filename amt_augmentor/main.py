@@ -377,25 +377,25 @@ def process_effect(
                     
                 while len(generated_semitones) > variations:
                     generated_semitones.pop()
-                        
-                for semitones in generated_semitones:
-                    random_suffix: str = random_word(5) if config.enable_random_suffix else ''
-                    output_filename = generate_output_filename(
-                        audio_base, "pitchshift", semitones, random_suffix, audio_ext
-                    )
-                    output_file_path = os.path.join(output_directory, output_filename)
 
-                    logger.info("Applying pitch shift: %s semitones", semitones)
-                    try:
-                        output_ann_file = apply_pitch_shift(
-                            standardized_audio, temp_ann_file, output_file_path, semitones
-                        )
-                        if output_ann_file:
-                            new_ann_files.append(output_ann_file)
-                    except Exception as e:
-                        logger.error(
-                            f"Error applying pitch shift ({semitones} semitones): {e}"
-                        )
+            for semitones in generated_semitones:
+                random_suffix: str = random_word(5) if config.enable_random_suffix else ''
+                output_filename = generate_output_filename(
+                    audio_base, "pitchshift", semitones, random_suffix, audio_ext
+                )
+                output_file_path = os.path.join(output_directory, output_filename)
+
+                logger.info("Applying pitch shift: %s semitones", semitones)
+                try:
+                    output_ann_file = apply_pitch_shift(
+                        standardized_audio, temp_ann_file, output_file_path, semitones
+                    )
+                    if output_ann_file:
+                        new_ann_files.append(output_ann_file)
+                except Exception as e:
+                    logger.error(
+                        f"Error applying pitch shift ({semitones} semitones): {e}"
+                    )
 
         elif effect_type == "reverb" and config.reverb_filter.enabled:
             # Reverb and filter variations
@@ -520,10 +520,22 @@ def process_effect(
                     logger.error("Error applying gain and chorus: %s", e)
 
         elif effect_type == "merge" and config.merge_audio.enabled:
+            # Filter out augmented files - only use original files for merging
+            effect_keywords = [
+                "timestretch",
+                "pitchshift",
+                "reverb_filters",
+                "gain_chorus",
+                "addpauses",
+                "merge",
+                "noise",
+                "_augmented_"  # General pattern for all augmented files
+            ]
             target_audio_files: List[str] = [
                 x
                 for x in grab_audios(input_directory)
                 if os.path.basename(standardized_audio) not in x
+                and not any(keyword in x for keyword in effect_keywords)
             ]
             if len(target_audio_files) >= config.merge_audio.merge_num:
                 audios4merge: List[str] = list()
@@ -566,10 +578,10 @@ def process_effect(
             # Noise intensity variations
 
             variations: int = config.add_noise.variations
-            min_intensity: int = config.add_noise.min_intensity
-            max_intensity: int = config.add_noise.max_intensity
+            min_intensity: float = config.add_noise.min_intensity
+            max_intensity: float = config.add_noise.max_intensity
 
-            generated_intensities: Set[int] = set()
+            generated_intensities: Set[float] = set()
             if config.add_noise.randomized:
                 for i in range(variations):
                     intensity = 1.0
@@ -579,7 +591,7 @@ def process_effect(
                     while (
                         intensity == 1.0 or intensity in generated_intensities
                     ) and attempts < max_attempts:
-                        intensity = round(random.uniform(min_intensity, max_intensity), 1)
+                        intensity = round(random.uniform(min_intensity, max_intensity), 3)  # More precision for small values
                         attempts += 1
 
                     if attempts == max_attempts:
@@ -589,16 +601,18 @@ def process_effect(
                         if i > 0:  # Skip if we already have some variations
                             continue
                         intensity = round(
-                            random.uniform(min_intensity, max_intensity), 1
+                            random.uniform(min_intensity, max_intensity), 3  # More precision for small values
                         )  # Use anyway
 
                     generated_intensities.add(intensity)
 
             else:
-                generated_intensities = set(list(np.logspace(min_intensity,
-                                                         max_intensity,
-                                                         variations+1,
-                                                         dtype=float)))
+                # Use linspace for evenly spaced values in the range
+                generated_intensities = set([round(x, 3) for x in
+                                           np.linspace(min_intensity,
+                                                      max_intensity,
+                                                      variations,
+                                                      dtype=float)])
                 try:
                     generated_intensities.remove(1.0)
                 except KeyError:

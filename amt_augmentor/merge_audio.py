@@ -37,12 +37,15 @@ def merge_audios(
         with open(ann_file) as f:
             ann_merged += f.read()
 
-    with open(os.path.join(output_directory, output_filename + ".ann"), "w") as f:
+    # Remove extension if already present
+    base_filename = output_filename.rsplit('.', 1)[0] if '.' in output_filename else output_filename
+
+    with open(os.path.join(output_directory, base_filename + ".ann"), "w") as f:
         f.write(ann_merged)
 
     sf.write(
-        os.path.join(output_directory, output_filename + ".wav"),
+        os.path.join(output_directory, base_filename + ".wav"),
         audios_merged,
         target_sr,
     )
-    return os.path.join(output_directory, output_filename + ".ann")
+    return os.path.join(output_directory, base_filename + ".ann")

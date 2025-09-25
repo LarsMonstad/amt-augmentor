@@ -101,8 +101,8 @@ class AddNoiseConfig:
 
     enabled: bool = True
     variations: int = 3
-    min_intensity: float = 0.1
-    max_intensity: float = 3
+    min_intensity: float = 0.005  # Subtle noise at minimum
+    max_intensity: float = 0.05   # Maximum ~5% of signal strength
     randomized: bool = True
 
 @dataclass
