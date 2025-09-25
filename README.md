@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/BotsForMusic_Logo_Negativ_2.png" alt="Bots for Music Logo" width="300">
+  <img src="images/BotsForMusic_Logo_Black_2.png" alt="Bots for Music Logo" width="300">
 
   # AMT-Augmentor
 
@@ -14,7 +14,7 @@
   [![Downloads](https://pepy.tech/badge/amt-augmentor)](https://pepy.tech/project/amt-augmentor)
 </div>
 
-> **📦 [View on PyPI](https://pypi.org/project/amt-augmentor/)** | **🐙 [View on GitHub](https://github.com/LarsMonstad/amt-augmentor)**
+> **📦 [View on PyPI](https://pypi.org/project/amt-augmentor/)** 
 >
 > **Note:** Formerly known as `amt-augpy`. Starting with v1.0.9, the package is **`amt-augmentor`**.
 
@@ -37,12 +37,14 @@ dataset/
 - **Gain & Chorus**: Depth and richness enhancement
 - **Noise Augmentation**: Controlled noise addition for robustness training
 - **Pause Manipulation**: Detection and modification of musical pauses
+- **Audio Merging**: Combine multiple audio files into one for complex training scenarios
 
 ### Processing & Dataset Handling
 - **Audio Standardization**: Conversion to 44.1kHz WAV format
 - **Parallel Processing**: Multi-core processing for faster augmentation
 - **Configuration System**: YAML-based parameter customization
 - **Dataset Validation**: Automatic validation of train/test/validation splits
+- **Dataset Modification**: Built-in tools to modify existing dataset splits
 - **MAESTRO Compatibility**: Dataset format compatible with MAESTRO v3.0.0
 
 ## Why AMT-Augmentor?
@@ -67,20 +69,6 @@ cd amt-augmentor
 pip install -e .
 ```
 
-For development, install with additional development dependencies:
-
-```bash
-pip install -e ".[dev]"
-```
-
-### Dependencies
-- librosa
-- soundfile
-- numpy
-- pedalboard
-- pretty_midi
-- pyyaml
-- tqdm
 
 ## Usage
 
@@ -113,6 +101,14 @@ amt-augmentor --generate-config my_config.yaml
 
 # Disable specific effects
 amt-augmentor /path/to/dataset/directory --disable-effect timestretch --disable-effect chorus
+
+# Control merge behavior (default merges 1 random file with each file)
+amt-augmentor /path/to/dataset/directory --merge-num 2  # Merge 2 files with each file
+
+# Modify existing dataset CSV files
+amt-augmentor --modify-csv dataset.csv --list-split all  # List all songs
+amt-augmentor --modify-csv dataset.csv --move-to-split test --song-patterns "Mozart"  # Move songs
+amt-augmentor --modify-csv dataset.csv --remove-songs --song-patterns "BadRecording"  # Remove songs
 
 # Parallel processing with 8 workers
 amt-augmentor /path/to/dataset/directory --num-workers 8
@@ -149,36 +145,6 @@ amt-augmentor --help
 
 All augmentation parameters can be customized using a YAML configuration file. See `config.sample.yaml` for a complete example with documentation.
 
-### Sample Configuration
-
-```yaml
-# Time stretching configuration
-time_stretch:
-  enabled: true
-  variations: 3
-  min_factor: 0.6
-  max_factor: 1.6
-
-# Pitch shifting configuration
-pitch_shift:
-  enabled: true
-  variations: 3
-  min_semitones: -5
-  max_semitones: 5
-
-# Noise addition configuration
-add_noise:
-  enabled: true
-  variations: 3
-  min_intensity: 1.1
-  max_intensity: 2.0
-  randomized: true
-
-# Processing configuration
-processing:
-  num_workers: 4
-  output_dir: null
-```
 
 ## File Format Support
 
@@ -203,6 +169,8 @@ Example:
     piano_augmented_timestretch_1.2_abc123.mid
     piano_augmented_noise_1.5_def456.wav
     piano_augmented_noise_1.5_def456.mid
+    piano_augmented_merge_piano2_ghi789.wav
+    piano_augmented_merge_piano2_ghi789.mid
 
 ## Dataset Creation & Validation
 
@@ -302,7 +270,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {1.1.0},
+  version      = {1.1.1},
   year         = {2025},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}
