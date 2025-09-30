@@ -2,7 +2,7 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
-## [Unreleased]
+## [?]
 
 ### Fixed
 - Fixed critical time stretch bug where MIDI annotations were scaled incorrectly (multiplied instead of divided by stretch factor)

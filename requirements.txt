@@ -6,7 +6,7 @@ librosa>=0.11.0,<0.13.0
 numpy>=1.23.5,<2.0.0  # For Python 3.13+, use numpy>=2.1,<3
 soundfile>=0.12.1,<0.14.0
 pedalboard>=0.7.3,<1.0.0
-git+https://github.com/LarsMonstad/pretty-midi.git@main#egg=pretty-midi
+pretty-midi-bfm
 tqdm>=4.64.1,<5.0.0
 numba>=0.56.4,<0.61  # For Python 3.13+, use numba>=0.61
 llvmlite>=0.39.1,<0.43  # For Python 3.13+, use llvmlite>=0.43
