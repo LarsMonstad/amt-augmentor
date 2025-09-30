@@ -51,6 +51,11 @@ dataset/
 
 Built for AMT, not just audio. Unlike general audio augmenters, AMT-Augmentor keeps paired audio+MIDI aligned by applying transform-consistent updates to MIDI (transpose for pitch shift, time-scale for stretch) and ships MAESTRO-style dataset tools (CSV builder + split validation) to avoid leakage. It also supports semitone/time-aware transforms and reproducible runs via --seed.
 
+## Requirements
+
+- Python 3.9, 3.10, 3.11, 3.12, or 3.13
+- System dependencies: `libsndfile` and `ffmpeg` (for audio processing)
+
 ## Installation
 
 You can install AMT-Augmentor either via pip or by cloning the repository:
