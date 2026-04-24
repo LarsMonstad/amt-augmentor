@@ -1,0 +1,3 @@
+canonical_composer,canonical_title,split,year,midi_filename,audio_filename,duration
+Standard composer,Ghost_augmented_pitchshift_2,train,2022,ds/Ghost_augmented_pitchshift_2.mid,ds/Ghost_augmented_pitchshift_2.wav,1.0
+Standard composer,Present,train,2022,ds/Present.mid,ds/Present.wav,1.0

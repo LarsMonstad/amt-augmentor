@@ -1,0 +1,5 @@
+canonical_composer,canonical_title,split,year,midi_filename,audio_filename,duration
+Standard composer,Song_A,train,2022,ds/Song_A.mid,ds/Song_A.wav,1.0
+Standard composer,Song_A_augmented_timestretch_1.2,train,2022,ds/Song_A_augmented_timestretch_1.2.mid,ds/Song_A_augmented_timestretch_1.2.wav,1.0
+Standard composer,Song_B,test,2022,ds/Song_B.mid,ds/Song_B.wav,1.0
+Standard composer,Song_C,validation,2022,ds/Song_C.mid,ds/Song_C.wav,1.0

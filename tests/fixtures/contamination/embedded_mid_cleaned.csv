@@ -1,0 +1,4 @@
+canonical_composer,canonical_title,split,year,midi_filename,audio_filename,duration
+Standard composer,Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned,test,2022,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned.mid,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned.wav,1.0
+Standard composer,Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_timestretch_1.2,train,2022,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_timestretch_1.2.mid,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_timestretch_1.2.wav,1.0
+Standard composer,Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_pitchshift_-3,train,2022,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_pitchshift_-3.mid,ds/Peisestugu_original_torr_filtered_06-Jan-2025_13-43-39.mid_cleaned_augmented_pitchshift_-3.wav,1.0

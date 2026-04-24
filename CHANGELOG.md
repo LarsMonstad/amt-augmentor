@@ -2,6 +2,36 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [1.2.0]
+
+### Changed
+- **Dataset layout is now segregated into `original/` and `augmented/` subfolders**
+  under the dataset directory. On first run the pipeline moves existing audio +
+  MIDI pairs into `<dataset>/original/` and writes all augmented output to
+  `<dataset>/augmented/`. The generated CSV references files via those
+  subfolder-prefixed paths. Removing an augmented-only dataset is now as simple
+  as `rm -rf augmented/` — source material is never mixed in.
+
+### Fixed
+- **Cross-split contamination detection** — `validate_dataset_split` previously
+  missed contamination on filenames containing embedded extension-like fragments
+  (e.g. `foo.mid_cleaned.mid`). The original-stem key was built with
+  `str.replace(".mid", "")` which stripped interior `.mid` fragments, while the
+  augmented-stem key used `os.path.splitext`, so the two drifted and lookups
+  silently failed. Replaced with a single `canonical_stem()` helper that only
+  strips a known trailing extension. Also now flags "orphan aug" rows (augmented
+  row with no matching original).
+
+### Added
+- `amt-augmentor --validate-csv <path>` — standalone, side-effect-free CSV
+  contamination check. `--strict` sets a non-zero exit code on any finding,
+  `--json` emits a structured report.
+- `python -m amt_augmentor.validate_split` grows `--strict` and `--json` flags
+  and a non-zero exit code under `--strict`.
+- Regression fixtures under `tests/fixtures/contamination/` (clean, simple leak,
+  embedded `.mid_cleaned`, Unicode/case, orphan aug, reverse leak) and
+  `tests/test_validate_split.py`.
+
 ## [?]
 
 ### Fixed

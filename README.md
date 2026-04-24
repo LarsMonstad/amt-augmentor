@@ -162,13 +162,21 @@ All augmentation parameters can be customized using a YAML configuration file. S
 
 ## Output Structure
 
-For each input file pair (audio + MIDI), the toolkit generates multiple augmented versions with the following naming convention:
+On first run, the toolkit reorganizes your dataset into two subfolders:
+
+    <dataset>/
+        original/    # your pristine audio + MIDI pairs (moved from the input dir)
+        augmented/   # every augmented file produced by the pipeline
+
+Keeping augmented output in its own folder means you can delete `augmented/` to
+reset the dataset without touching any source material.
+
+Augmented files follow the naming convention:
 
     original_name_augmented_effect_parameter_randomsuffix.extension
 
-The `_augmented_` identifier ensures all augmented files are properly recognized and handled during dataset creation.
-
-Example:
+The `_augmented_` identifier ensures all augmented files are properly recognized
+and handled during dataset creation. Example of `augmented/` contents:
 
     piano_augmented_timestretch_1.2_abc123.wav
     piano_augmented_timestretch_1.2_abc123.mid
@@ -176,6 +184,10 @@ Example:
     piano_augmented_noise_1.5_def456.mid
     piano_augmented_merge_piano2_ghi789.wav
     piano_augmented_merge_piano2_ghi789.mid
+
+The generated CSV references files with their subfolder prefix
+(`<dataset>/original/...` and `<dataset>/augmented/...`), so the physical
+layout mirrors the CSV exactly.
 
 ## Dataset Creation & Validation
 
@@ -198,8 +210,27 @@ amt-augmentor /path/to/directory --custom-test-songs "song1,song3,song5"
 
 Dataset split validation is automatically performed after CSV creation to ensure:
 - Augmented songs are not included in test/validation splits
-- No cross-split contamination occurs
-- Original and augmented songs are properly distributed
+- No cross-split contamination occurs (an augmented row's source original must
+  live in the same split)
+- Every augmented row has a matching original (no "orphan aug" rows)
+
+You can also run validation as a standalone, side-effect-free check — useful
+after hand-editing a CSV, merging datasets, or receiving a split from someone
+else:
+
+```bash
+# Human-readable report (exits 0 regardless)
+amt-augmentor --validate-csv dataset.csv
+
+# CI-friendly: non-zero exit when contamination is found
+amt-augmentor --validate-csv dataset.csv --strict
+
+# Machine-readable JSON (for piping into other tooling)
+amt-augmentor --validate-csv dataset.csv --json
+
+# Equivalent direct invocation of the validator module
+python -m amt_augmentor.validate_split dataset.csv --strict
+```
 
 ### CSV Format
 

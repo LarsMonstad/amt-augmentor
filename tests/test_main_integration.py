@@ -16,15 +16,17 @@ import pretty_midi
 
 
 def create_test_dataset(directory):
-    """Create a minimal test dataset with MIDI and WAV files."""
-    os.makedirs(directory, exist_ok=True)
+    """Create a minimal test dataset with MIDI and WAV files in the
+    standardized ``original/`` subfolder layout."""
+    originals_dir = os.path.join(directory, "original")
+    os.makedirs(originals_dir, exist_ok=True)
 
     # Create test files
     songs = ["song1", "song2", "song3", "song4", "song5"]
 
     for song in songs:
         # Create MIDI file
-        midi_path = os.path.join(directory, f"{song}.mid")
+        midi_path = os.path.join(originals_dir, f"{song}.mid")
         pm = pretty_midi.PrettyMIDI()
         instrument = pretty_midi.Instrument(program=0)
         note = pretty_midi.Note(velocity=100, pitch=60, start=0.5, end=1.0)
@@ -33,7 +35,7 @@ def create_test_dataset(directory):
         pm.write(midi_path)
 
         # Create WAV file
-        wav_path = os.path.join(directory, f"{song}.wav")
+        wav_path = os.path.join(originals_dir, f"{song}.wav")
         sr = 22050
         dur = 1.0
         t = np.linspace(0, dur, int(sr * dur), endpoint=False)

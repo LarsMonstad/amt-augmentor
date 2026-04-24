@@ -26,7 +26,17 @@ from amt_augmentor.add_pauses import calculate_time_distance
 from amt_augmentor.merge_audio import merge_audios
 from amt_augmentor.convertfiles import standardize_audio
 from amt_augmentor.create_maestro_csv import create_song_list
-from amt_augmentor.validate_split import validate_dataset_split
+from amt_augmentor.layout import (
+    AUGMENTED_SUBDIR,
+    ORIGINAL_SUBDIR,
+    ensure_subdirs,
+    stage_originals,
+)
+from amt_augmentor.validate_split import (
+    find_contamination,
+    validate_dataset_split,
+    _print_report,
+)
 from amt_augmentor.config import load_config, save_default_config, Config
 
 import numpy as np
@@ -927,6 +937,26 @@ def main() -> None:
         help="Comma-separated list of song names to force as test (originals only, no augmented versions)"
     )
 
+    # Dataset validation (standalone — no side effects)
+    parser.add_argument(
+        "--validate-csv",
+        type=str,
+        metavar="CSV_PATH",
+        help="Validate an existing dataset CSV for cross-split contamination and exit. "
+             "No augmentation is performed."
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="With --validate-csv, exit with a non-zero status if contamination is found."
+    )
+    parser.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="With --validate-csv, emit the report as JSON on stdout."
+    )
+
     # Dataset modification options
     parser.add_argument(
         "--modify-csv",
@@ -995,6 +1025,27 @@ def main() -> None:
         random.seed(args.seed)
         np.random.seed(args.seed)
         logger.info(f"Random seed set to {args.seed} for reproducibility")
+
+    # Handle standalone validation mode — no side effects, no augmentation.
+    if args.validate_csv:
+        if args.modify_csv or args.input_directory or args.generate_config:
+            logger.error(
+                "--validate-csv is standalone; do not combine with --modify-csv, "
+                "--generate-config, or an input directory."
+            )
+            sys.exit(2)
+
+        report = find_contamination(args.validate_csv)
+        if args.as_json:
+            import json as _json
+            _json.dump(report, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            _print_report(report)
+
+        if not report["clean"] and args.strict:
+            sys.exit(1)
+        return
 
     # Handle dataset modification mode
     if args.modify_csv:
@@ -1209,12 +1260,26 @@ def main() -> None:
             elif effect == "noise":
                 config.add_noise.enabled = False
 
-    # Setup output directory
-    output_directory = config.processing.output_dir or args.input_directory
-    os.makedirs(output_directory, exist_ok=True)
+    # Setup output directory. The dataset is organised into two subfolders:
+    #   <output_directory>/original/   pristine input audio+MIDI pairs
+    #   <output_directory>/augmented/  every file produced by augmentation
+    # We stage originals into the "original/" subfolder before processing so
+    # downstream code always sees a clean, segregated layout.
+    dataset_dir = config.processing.output_dir or args.input_directory
+    os.makedirs(dataset_dir, exist_ok=True)
+    originals_dir, augmented_dir = ensure_subdirs(dataset_dir)
+    # Back-compat alias — some older code paths below still reference this name.
+    output_directory = augmented_dir
+
+    stage_originals(args.input_directory, originals_dir)
+
+    # Internal helpers (gen_ann, process_files) re-read config.processing.output_dir
+    # as a defensive override; point it at augmented_dir so those overrides stay
+    # consistent with the subfolder layout.
+    config.processing.output_dir = augmented_dir
 
     # Get all audio files with matching MIDI files
-    audio_files = grab_audios(args.input_directory)
+    audio_files = grab_audios(originals_dir)
 
     # Filter out files that have already been processed based on naming pattern
     effect_keywords = [
@@ -1238,7 +1303,7 @@ def main() -> None:
     matched_count = 0
     for audio in audio_files:
         matching_midi = os.path.splitext(audio)[0] + ".mid"
-        if os.path.exists(os.path.join(args.input_directory, matching_midi)):
+        if os.path.exists(os.path.join(originals_dir, matching_midi)):
             matched_count += 1
 
     if matched_count == 0:
@@ -1284,15 +1349,15 @@ def main() -> None:
     # Generate the ANN's beforehand to allow merging of audio files
     for audio in tqdm(audio_files, desc="Generating MIDI annotations"):
         matching_midi = os.path.splitext(audio)[0] + ".mid"
-        midi_path = os.path.join(args.input_directory, matching_midi)
+        midi_path = os.path.join(originals_dir, matching_midi)
         logger.info("Generating ANN for %s with %s", audio, matching_midi)
 
         audio_files_described.append(
             gen_ann(
-                args.input_directory,
-                os.path.join(args.input_directory, audio),
+                originals_dir,
+                os.path.join(originals_dir, audio),
                 midi_path,
-                output_directory,
+                augmented_dir,
                 config,
             )
         )
@@ -1307,10 +1372,10 @@ def main() -> None:
             logger.info("Processing %s with %s", audio, matching_midi)
             try:
                 process_files(
-                    args.input_directory,
+                    originals_dir,
                     audio,
                     midi_path,
-                    output_directory,
+                    augmented_dir,
                     standardized_audio,
                     temp_ann_file,
                     config,
@@ -1332,7 +1397,8 @@ def main() -> None:
 
     # After all processing is done, check for matching files
     logger.info("Checking final results...")
-    check_matching_files(output_directory)
+    check_matching_files(originals_dir)
+    check_matching_files(augmented_dir)
 
     # Create and validate dataset CSV if not skipped
     if not args.skip_csv:
@@ -1347,7 +1413,7 @@ def main() -> None:
         # Parse custom test songs if provided
         custom_test_songs = [s.strip() for s in args.custom_test_songs.split(",") if s.strip()]
 
-        csv_path = create_song_list(output_directory, split_ratios=split_ratios, custom_test_songs=custom_test_songs)
+        csv_path = create_song_list(dataset_dir, split_ratios=split_ratios, custom_test_songs=custom_test_songs)
 
         logger.info("Validating dataset split...")
         validate_dataset_split(csv_path)

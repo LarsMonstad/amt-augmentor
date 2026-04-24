@@ -1,0 +1,13 @@
+{
+  "clean": false,
+  "cross_split": [
+    {
+      "file": "FooBar_augmented_pitchshift_-5",
+      "split": "train",
+      "original": "FooBar",
+      "original_split": "test"
+    }
+  ],
+  "aug_in_eval": [],
+  "orphan_aug": []
+}

@@ -1,0 +1,6 @@
+{
+  "clean": false,
+  "cross_split_count": 2,
+  "aug_in_eval": [],
+  "orphan_aug": []
+}

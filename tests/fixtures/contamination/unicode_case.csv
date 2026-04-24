@@ -1,0 +1,3 @@
+canonical_composer,canonical_title,split,year,midi_filename,audio_filename,duration
+Standard composer,Godværsdagen_Øst,validation,2022,ds/Godværsdagen_Øst.mid,ds/Godværsdagen_Øst.wav,1.0
+Standard composer,Godværsdagen_Øst_augmented_pitchshift_-5,train,2022,ds/Godværsdagen_Øst_augmented_pitchshift_-5.mid,ds/Godværsdagen_Øst_augmented_pitchshift_-5.wav,1.0

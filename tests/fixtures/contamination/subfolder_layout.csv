@@ -1,0 +1,5 @@
+canonical_composer,canonical_title,split,year,midi_filename,audio_filename,duration
+Standard composer,FooBar,test,2022,ds/original/FooBar.mid,ds/original/FooBar.wav,1.0
+Standard composer,FooBar_augmented_pitchshift_-5,train,2022,ds/augmented/FooBar_augmented_pitchshift_-5.mid,ds/augmented/FooBar_augmented_pitchshift_-5.wav,1.0
+Standard composer,CleanSong,train,2022,ds/original/CleanSong.mid,ds/original/CleanSong.wav,1.0
+Standard composer,CleanSong_augmented_timestretch_1.1,train,2022,ds/augmented/CleanSong_augmented_timestretch_1.1.mid,ds/augmented/CleanSong_augmented_timestretch_1.1.wav,1.0

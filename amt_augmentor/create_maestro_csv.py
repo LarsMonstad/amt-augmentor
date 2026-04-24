@@ -5,6 +5,8 @@ import argparse
 import librosa
 from collections import defaultdict
 
+from amt_augmentor.layout import AUGMENTED_SUBDIR, ORIGINAL_SUBDIR
+
 
 def is_augmented_version(filename):
     """Check if the file is an augmented version based on the '_augmented_' identifier."""
@@ -57,16 +59,25 @@ def get_wav_duration(file_path):
 
 
 def create_song_list(directory, split_ratios=None, custom_test_songs=None):
-    if split_ratios is None:
-        split_ratios = {'train': 0.7, 'test': 0.15, 'validation': 0.15}
     """
-    Creates a CSV file with a list of original MIDI-WAV pairs.
+    Creates a CSV file with a list of MIDI-WAV pairs. The dataset directory is
+    expected to contain two subfolders:
+
+        <directory>/original/   — pristine audio/MIDI pairs
+        <directory>/augmented/  — every augmented output
+
     For each original song (non-augmented):
       - If its title (case-insensitive) contains one of the custom test song substrings,
         its split is forced to "test" and no augmented versions are added.
       - Otherwise, its split is determined based on the provided ratios, and augmented
         versions are added if the song is in the training split.
+
+    The CSV emits paths prefixed with the subfolder — e.g.
+    ``<dataset>/original/song.mid`` and ``<dataset>/augmented/song_augmented_...``
+    — so the physical layout mirrors the CSV exactly.
     """
+    if split_ratios is None:
+        split_ratios = {'train': 0.7, 'test': 0.15, 'validation': 0.15}
     if custom_test_songs is None:
         custom_test_songs = []
     # Convert custom song names to lower case for comparison.
@@ -76,19 +87,22 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
     folder_name = os.path.basename(directory)
     csv_filename = f"{folder_name}.csv"
 
-    # Get all files
-    all_files = os.listdir(directory)
+    originals_subdir = os.path.join(directory, ORIGINAL_SUBDIR)
+    augmented_subdir = os.path.join(directory, AUGMENTED_SUBDIR)
+    originals_files = os.listdir(originals_subdir) if os.path.isdir(originals_subdir) else []
+    augmented_files = os.listdir(augmented_subdir) if os.path.isdir(augmented_subdir) else []
+
     song_splits = {}
     split_counts = defaultdict(int)
     original_pairs = []
 
-    # Loop over all non-augmented MIDI files.
-    for f in all_files:
+    # Loop over all originals (non-augmented MIDI files in original/).
+    for f in originals_files:
         if f.endswith(".mid") and not is_augmented_version(f):
             title = os.path.splitext(f)[0]
             # Find matching WAV file (case-insensitive).
             wav_file = None
-            for w in all_files:
+            for w in originals_files:
                 if w.lower() == (title + '.wav').lower():
                     wav_file = w
                     break
@@ -116,7 +130,7 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
     # Process each original song.
     for midi_file, wav_file, title in original_pairs:
         split = song_splits[title]
-        wav_path = os.path.join(directory, wav_file)
+        wav_path = os.path.join(originals_subdir, wav_file)
         duration = get_wav_duration(wav_path)
 
         # Add original song
@@ -126,32 +140,34 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
                 title,
                 split,
                 2022,
-                f"{folder_name}/{midi_file}",
-                f"{folder_name}/{wav_file}",
+                f"{folder_name}/{ORIGINAL_SUBDIR}/{midi_file}",
+                f"{folder_name}/{ORIGINAL_SUBDIR}/{wav_file}",
                 duration,
             ]
         )
 
         # Only add augmented versions if the song is in train and is NOT forced to test.
         if split == 'train':
-            for f in all_files:
+            for f in augmented_files:
                 if f.endswith(".mid") and is_augmented_version(f):
                     aug_base = get_original_song_name(f)
                     if aug_base == title:
                         aug_midi = f
                         aug_wav = os.path.splitext(f)[0] + '.wav'
                         # Find the matching WAV file (case-insensitive).
-                        for w in all_files:
+                        for w in augmented_files:
                             if w.lower() == aug_wav.lower():
-                                aug_duration = get_wav_duration(os.path.join(directory, w))
+                                aug_duration = get_wav_duration(
+                                    os.path.join(augmented_subdir, w)
+                                )
                                 rows.append(
                                     [
                                         'Standard composer',
                                         os.path.splitext(aug_midi)[0],
                                         'train',
                                         2022,
-                                        f"{folder_name}/{aug_midi}",
-                                        f"{folder_name}/{w}",
+                                        f"{folder_name}/{AUGMENTED_SUBDIR}/{aug_midi}",
+                                        f"{folder_name}/{AUGMENTED_SUBDIR}/{w}",
                                         aug_duration,
                                     ]
                                 )

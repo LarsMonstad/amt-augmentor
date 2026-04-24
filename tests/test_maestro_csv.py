@@ -102,16 +102,19 @@ def test_get_wav_duration(tmp_path):
 
 def test_create_song_list(tmp_path, monkeypatch):
     """
-    We'll create a fake directory with one original song and one augmented version,
-    run the CSV creation, and check if the CSV looks right.
+    Create a fake dataset with original/ and augmented/ subfolders, run the CSV
+    creation, and check the CSV uses the subfolder-prefixed paths.
     """
     data_dir = tmp_path / "test_data"
-    data_dir.mkdir()
+    originals_dir = data_dir / "original"
+    augmented_dir = data_dir / "augmented"
+    originals_dir.mkdir(parents=True)
+    augmented_dir.mkdir(parents=True)
 
-    # Create original song files
+    # Create original song files under original/
     orig_title = "song1"
-    orig_mid = data_dir / f"{orig_title}.mid"
-    orig_wav = data_dir / f"{orig_title}.wav"
+    orig_mid = originals_dir / f"{orig_title}.mid"
+    orig_wav = originals_dir / f"{orig_title}.wav"
     orig_mid.write_text("dummy midi content")
 
     sr = 22050
@@ -120,9 +123,10 @@ def test_create_song_list(tmp_path, monkeypatch):
     y = 0.5 * np.sin(2 * np.pi * 220 * t)
     sf.write(str(orig_wav), y, sr)
 
-    # Create an augmented version with new naming convention
-    aug_mid = data_dir / f"{orig_title}_augmented_timestretch_aug.mid"
-    aug_wav = data_dir / f"{orig_title}_augmented_timestretch_aug.wav"
+    # Create an augmented version under augmented/
+    aug_stem = f"{orig_title}_augmented_timestretch_aug"
+    aug_mid = augmented_dir / f"{aug_stem}.mid"
+    aug_wav = augmented_dir / f"{aug_stem}.wav"
     aug_mid.write_text("dummy augmented midi content")
 
     dur_aug = 1.2  # slightly different duration
@@ -142,29 +146,30 @@ def test_create_song_list(tmp_path, monkeypatch):
     finally:
         # Make sure we restore the original directory
         os.chdir(original_cwd)
-    
+
     csv_filename = f"{data_dir.name}.csv"
     csv_file = tmp_path / csv_filename
     assert csv_file.exists(), "CSV file wasn't created, somethin' went wrong"
-    
+
     # Read in the CSV and check its contents
     with open(csv_file, 'r', newline='', encoding='utf-8') as f:
         reader = csv.reader(f)
         rows = list(reader)
-    
+
     # First row is header; expect 2 data rows (one for orig, one for aug)
-    header = rows[0]
     data_rows = rows[1:]
     assert len(data_rows) == 2, f"Expected 2 rows in CSV, but got {len(data_rows)}"
-    
-    # Check original song row
-    orig_row = data_rows[0]
-    assert orig_row[1] == orig_title, "Original song title doesn't match"
+
+    # Find the original and augmented rows by title (order-independent)
+    orig_row = next(r for r in data_rows if r[1] == orig_title)
+    aug_row = next(r for r in data_rows if r[1] == aug_stem)
+
+    # Paths must be prefixed with the subfolder name.
+    assert orig_row[4] == f"test_data/original/{orig_title}.mid"
+    assert orig_row[5] == f"test_data/original/{orig_title}.wav"
+    assert aug_row[4] == f"test_data/augmented/{aug_stem}.mid"
+    assert aug_row[5] == f"test_data/augmented/{aug_stem}.wav"
+
     assert pytest.approx(float(orig_row[6]), rel=0.05) == dur, "Original duration seems off"
-    
-    # Check augmented song row
-    aug_row = data_rows[1]
-    expected_aug_title = os.path.splitext(aug_mid.name)[0]
-    assert aug_row[1] == expected_aug_title, "Augmented title doesn't match"
     assert pytest.approx(float(aug_row[6]), rel=0.05) == dur_aug, "Augmented duration seems off"
 
