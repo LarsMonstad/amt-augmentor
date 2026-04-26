@@ -160,6 +160,28 @@ class TestMainCLIIntegration:
         assert len(custom_songs) == 3, f"Expected 3 custom songs, got {len(custom_songs)}"
 
     @patch('amt_augmentor.main.create_song_list')
+    def test_custom_validation_songs_passed(self, mock_create_song_list):
+        """--custom-validation-songs is parsed and forwarded to create_song_list."""
+        mock_create_song_list.return_value = "test.csv"
+
+        test_args = [
+            'amt-augmentor',
+            self.test_dir,
+            '--custom-validation-songs', 'song2,song4',
+        ]
+
+        with patch.object(sys, 'argv', test_args):
+            from amt_augmentor.main import main
+            with patch('amt_augmentor.main.process_files'):
+                with patch('amt_augmentor.main.gen_ann') as mock_gen_ann:
+                    mock_gen_ann.return_value = ('audio.wav', 'standardized.wav', 'temp.ann')
+                    with patch('amt_augmentor.main.validate_dataset_split'):
+                        main()
+
+        _, kwargs = mock_create_song_list.call_args
+        assert kwargs.get('custom_validation_songs') == ['song2', 'song4']
+
+    @patch('amt_augmentor.main.create_song_list')
     def test_default_split_ratios(self, mock_create_song_list):
         """
         Test that default split ratios are used when not specified.

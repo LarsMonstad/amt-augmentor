@@ -20,9 +20,15 @@ def update_ann_file(ann_content, pitch_shift):
     updated_content = []
     for line in ann_content:
         parts = line.strip().split("\t")
-        onset, offset, pitch, channel = parts
+        if len(parts) != 4:
+            continue  # malformed annotation line — drop
+        onset, offset, pitch, velocity = parts
         pitch_new = int(pitch) + pitch_shift
-        updated_line = f"{onset}\t{offset}\t{pitch_new}\t{channel}"
+        # MIDI pitch is 0-127; drop notes that fall outside this range after
+        # transposition rather than emit invalid annotations.
+        if pitch_new < 0 or pitch_new > 127:
+            continue
+        updated_line = f"{onset}\t{offset}\t{pitch_new}\t{velocity}"
         updated_content.append(updated_line)
     return updated_content
 

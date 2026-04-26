@@ -173,3 +173,92 @@ def test_create_song_list(tmp_path, monkeypatch):
     assert pytest.approx(float(orig_row[6]), rel=0.05) == dur, "Original duration seems off"
     assert pytest.approx(float(aug_row[6]), rel=0.05) == dur_aug, "Augmented duration seems off"
 
+
+def _build_dataset(data_dir, songs):
+    """Create the original/ subfolder layout with `songs` originals and no augmented files."""
+    originals_dir = data_dir / "original"
+    augmented_dir = data_dir / "augmented"
+    originals_dir.mkdir(parents=True)
+    augmented_dir.mkdir(parents=True)
+    sr = 22050
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    y = 0.5 * np.sin(2 * np.pi * 220 * t)
+    for s in songs:
+        (originals_dir / f"{s}.mid").write_text("dummy")
+        sf.write(str(originals_dir / f"{s}.wav"), y, sr)
+
+
+def test_custom_validation_songs(tmp_path, monkeypatch):
+    """Songs matching --custom-validation-songs land in validation, not augmented."""
+    data_dir = tmp_path / "ds"
+    _build_dataset(data_dir, ["alpha", "beta", "gamma"])
+
+    monkeypatch.chdir(tmp_path)
+    create_song_list(
+        str(data_dir),
+        {'train': 0.7, 'test': 0.15, 'validation': 0.15},
+        custom_test_songs=[],
+        custom_validation_songs=["beta"],
+    )
+
+    with open(tmp_path / f"{data_dir.name}.csv") as f:
+        rows = list(csv.DictReader(f))
+
+    by_title = {r['canonical_title']: r for r in rows}
+    assert by_title['beta']['split'] == 'validation'
+    # Beta must not have augmented versions
+    assert not any('beta_augmented_' in r['canonical_title'] for r in rows)
+
+
+def test_split_seed_is_deterministic(tmp_path, monkeypatch):
+    """Same split_seed must produce the same split assignment across runs."""
+    songs = [f"song{i}" for i in range(20)]
+    runs = []
+    for i in range(2):
+        ds = tmp_path / f"ds{i}"
+        _build_dataset(ds, songs)
+        monkeypatch.chdir(tmp_path)
+        path = create_song_list(str(ds), split_seed=42)
+        with open(path) as f:
+            assignments = {r['canonical_title']: r['split'] for r in csv.DictReader(f)}
+        runs.append(assignments)
+    assert runs[0] == runs[1]
+
+
+def test_split_seed_changes_assignment(tmp_path, monkeypatch):
+    """Different seeds should produce different assignments (with high probability)."""
+    songs = [f"song{i}" for i in range(20)]
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    _build_dataset(a, songs)
+    _build_dataset(b, songs)
+    monkeypatch.chdir(tmp_path)
+    pa = create_song_list(str(a), split_seed=1)
+    pb = create_song_list(str(b), split_seed=2)
+    with open(pa) as f:
+        sa = {r['canonical_title']: r['split'] for r in csv.DictReader(f)}
+    with open(pb) as f:
+        sb = {r['canonical_title']: r['split'] for r in csv.DictReader(f)}
+    # With 20 songs and 70/15/15 splits, two different seeds should differ on
+    # at least one song almost always.
+    assert sa != sb
+
+
+def test_custom_test_takes_precedence_over_validation(tmp_path, monkeypatch, capsys):
+    """When a title matches both lists, test wins and a warning is printed."""
+    data_dir = tmp_path / "ds"
+    _build_dataset(data_dir, ["sharedname"])
+
+    monkeypatch.chdir(tmp_path)
+    create_song_list(
+        str(data_dir),
+        custom_test_songs=["sharedname"],
+        custom_validation_songs=["sharedname"],
+    )
+
+    with open(tmp_path / f"{data_dir.name}.csv") as f:
+        rows = list(csv.DictReader(f))
+
+    assert rows[0]['split'] == 'test'
+    assert "WARNING" in capsys.readouterr().out
+

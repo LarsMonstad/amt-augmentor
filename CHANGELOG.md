@@ -4,14 +4,6 @@ All notable changes to AMT-Augmentor will be documented in this file.
 
 ## [1.2.0]
 
-### Changed
-- **Dataset layout is now segregated into `original/` and `augmented/` subfolders**
-  under the dataset directory. On first run the pipeline moves existing audio +
-  MIDI pairs into `<dataset>/original/` and writes all augmented output to
-  `<dataset>/augmented/`. The generated CSV references files via those
-  subfolder-prefixed paths. Removing an augmented-only dataset is now as simple
-  as `rm -rf augmented/` — source material is never mixed in.
-
 ### Fixed
 - **Cross-split contamination detection** — `validate_dataset_split` previously
   missed contamination on filenames containing embedded extension-like fragments
@@ -19,8 +11,53 @@ All notable changes to AMT-Augmentor will be documented in this file.
   `str.replace(".mid", "")` which stripped interior `.mid` fragments, while the
   augmented-stem key used `os.path.splitext`, so the two drifted and lookups
   silently failed. Replaced with a single `canonical_stem()` helper that only
-  strips a known trailing extension. Also now flags "orphan aug" rows (augmented
-  row with no matching original).
+  strips a known trailing extension. Also now flags "orphan aug" rows.
+- **Showstopper after subfolder migration**: the main processing loop checked
+  `os.path.exists(midi_path)` against a bare filename, so after originals moved
+  into `<dataset>/original/` the existence check failed and the entire
+  augmentation loop silently no-op'd unless cwd happened to be `originals_dir`.
+- Stray `print(midi_path)` removed from the processing loop.
+- Wrong logger message ("Error applying gain and chorus") emitted on noise
+  failures.
+- `pitch_shift.update_ann_file` now skips malformed lines and drops notes that
+  would transpose outside MIDI 0–127 instead of writing invalid annotations.
+- `distortionchorus.apply_gain_and_chorus` no longer shells out via
+  `os.system("cp …")` — replaced with `shutil.copy2`, removing a shell-quoting
+  hazard on filenames with spaces or special characters.
+- `convertfiles.standardize_audio` now writes the converted file, *verifies*
+  it, then deletes the original — previously a crash between `os.remove` and
+  `os.rename` could lose the source audio.
+- Effect-parameter generation (time-stretch, pitch-shift, noise) used
+  `set.pop()` to drop excess linspace values; this is unordered and broke
+  `--seed` reproducibility. Now sorted-then-truncated.
+- `create_song_list` now `sorted()`s the originals listing before greedy
+  split assignment, so split membership no longer depends on filesystem
+  enumeration order.
+
+### Added
+- `--split-seed` flag — deterministic random shuffle of originals before
+  greedy split assignment. When `--seed` is set and `--split-seed` is not,
+  `--split-seed` defaults to `--seed` so a single seed makes the whole run
+  reproducible.
+- Auto-fallback to `num_workers=1` when `--seed` is set, with a warning. Worker
+  subprocesses spawn fresh interpreters and would otherwise silently ignore
+  the seed.
+
+### Changed
+- **`merge_audio` is now disabled by default.** The current implementation can
+  introduce cross-split contamination — at augmentation time, splits are not
+  yet assigned, so a merged "augmented" output (later added to train) may
+  contain audio from songs that end up in test or validation. A loud warning
+  is emitted whenever the effect is re-enabled. Proper fix (split-aware
+  augmentation) is tracked for a follow-up release.
+- README: removed reference to a `--merge-num` CLI flag that does not exist;
+  merge count is configured via the YAML config (`merge_audio.merge_num`).
+- **Dataset layout is now segregated into `original/` and `augmented/` subfolders**
+  under the dataset directory. On first run the pipeline moves existing audio +
+  MIDI pairs into `<dataset>/original/` and writes all augmented output to
+  `<dataset>/augmented/`. The generated CSV references files via those
+  subfolder-prefixed paths. Removing an augmented-only dataset is now as simple
+  as `rm -rf augmented/` — source material is never mixed in.
 
 ### Added
 - `amt-augmentor --validate-csv <path>` — standalone, side-effect-free CSV

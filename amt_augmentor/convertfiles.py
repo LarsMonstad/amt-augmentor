@@ -27,10 +27,28 @@ def standardize_audio(input_file, target_sr=44100):
         # Save as WAV with explicit format specification
         sf.write(temp_file, y, target_sr, format="WAV", subtype="PCM_16")
 
-        # Remove original and rename temp file
-        os.remove(input_file)
+        # Verify the temp file was written before removing the original — if the
+        # write was interrupted or sf.write produced an empty file we must NOT
+        # delete the user's source audio.
+        if not os.path.exists(temp_file) or os.path.getsize(temp_file) == 0:
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
+            raise IOError(
+                f"Failed to write standardized audio for {input_file}; "
+                "original file is unchanged."
+            )
+
         new_path = base + ".wav"
-        os.rename(temp_file, new_path)
+        # If the original is .wav we'd be replacing it with itself; rename then
+        # the temp into place. Otherwise rename the temp first, *then* delete
+        # the original — so an interrupted run never loses the source.
+        if new_path == input_file:
+            os.replace(temp_file, new_path)
+        else:
+            os.rename(temp_file, new_path)
+            os.remove(input_file)
         print(f"Converted {os.path.basename(input_file)} to 44.1kHz WAV")
         return new_path, True
 

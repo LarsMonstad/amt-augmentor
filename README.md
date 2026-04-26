@@ -96,7 +96,11 @@ This will process all compatible audio files in the directory and their correspo
 amt-augmentor /path/to/dataset/directory --config my_config.yaml
 
 # Set random seed for reproducible augmentation
+# (forces num_workers=1 — worker subprocesses don't inherit RNG state)
 amt-augmentor /path/to/dataset/directory --seed 42
+
+# Reproducible train/test/validation split (independent of --seed)
+amt-augmentor /path/to/dataset/directory --split-seed 7
 
 # Specify an output directory
 amt-augmentor /path/to/dataset/directory --output-directory /path/to/output
@@ -107,8 +111,8 @@ amt-augmentor --generate-config my_config.yaml
 # Disable specific effects
 amt-augmentor /path/to/dataset/directory --disable-effect timestretch --disable-effect chorus
 
-# Control merge behavior (default merges 1 random file with each file)
-amt-augmentor /path/to/dataset/directory --merge-num 2  # Merge 2 files with each file
+# Control merge behavior via the YAML config (merge.merge_num)
+# (no CLI flag — see config.sample.yaml for the merge_audio.merge_num key)
 
 # Modify existing dataset CSV files
 amt-augmentor --modify-csv dataset.csv --list-split all  # List all songs
@@ -123,6 +127,9 @@ amt-augmentor /path/to/dataset/directory --train-ratio 0.8 --test-ratio 0.1 --va
 
 # Force specific songs to test set (prevents augmentation)
 amt-augmentor /path/to/dataset/directory --custom-test-songs "song1,song3,song5"
+
+# Force specific songs to validation set (prevents augmentation)
+amt-augmentor /path/to/dataset/directory --custom-validation-songs "song2,song4"
 
 # Dry run to preview what will be processed
 amt-augmentor /path/to/dataset/directory --dry-run
@@ -204,7 +211,14 @@ amt-augmentor /path/to/directory --train-ratio 0.8 --test-ratio 0.1 --validation
 
 # Force specific songs to test set (they won't be augmented)
 amt-augmentor /path/to/directory --custom-test-songs "song1,song3,song5"
+
+# Force specific songs to validation set (they won't be augmented)
+amt-augmentor /path/to/directory --custom-validation-songs "song2,song4"
 ```
+
+`--custom-test-songs` and `--custom-validation-songs` use case-insensitive
+substring matching against the song stem. If the same title matches both lists,
+test wins and a warning is printed.
 
 ### Validating the Dataset Split
 

@@ -58,7 +58,8 @@ def get_wav_duration(file_path):
         return 0
 
 
-def create_song_list(directory, split_ratios=None, custom_test_songs=None):
+def create_song_list(directory, split_ratios=None, custom_test_songs=None,
+                     custom_validation_songs=None, split_seed=None):
     """
     Creates a CSV file with a list of MIDI-WAV pairs. The dataset directory is
     expected to contain two subfolders:
@@ -69,8 +70,18 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
     For each original song (non-augmented):
       - If its title (case-insensitive) contains one of the custom test song substrings,
         its split is forced to "test" and no augmented versions are added.
+      - Else if its title contains a custom validation song substring, the split
+        is forced to "validation" and no augmented versions are added.
       - Otherwise, its split is determined based on the provided ratios, and augmented
         versions are added if the song is in the training split.
+
+    Custom test songs take precedence over custom validation songs when a title
+    matches both lists; a warning is printed in that case.
+
+    ``split_seed`` (optional int): when provided, the originals list is
+    deterministically shuffled with this seed before the greedy split
+    assignment. This decouples split membership from filesystem listing order,
+    which is not portable across machines/filesystems.
 
     The CSV emits paths prefixed with the subfolder — e.g.
     ``<dataset>/original/song.mid`` and ``<dataset>/augmented/song_augmented_...``
@@ -80,8 +91,11 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
         split_ratios = {'train': 0.7, 'test': 0.15, 'validation': 0.15}
     if custom_test_songs is None:
         custom_test_songs = []
+    if custom_validation_songs is None:
+        custom_validation_songs = []
     # Convert custom song names to lower case for comparison.
     custom_test_songs = [s.lower() for s in custom_test_songs]
+    custom_validation_songs = [s.lower() for s in custom_validation_songs]
 
     directory = os.path.abspath(directory)
     folder_name = os.path.basename(directory)
@@ -89,8 +103,15 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
 
     originals_subdir = os.path.join(directory, ORIGINAL_SUBDIR)
     augmented_subdir = os.path.join(directory, AUGMENTED_SUBDIR)
-    originals_files = os.listdir(originals_subdir) if os.path.isdir(originals_subdir) else []
-    augmented_files = os.listdir(augmented_subdir) if os.path.isdir(augmented_subdir) else []
+    # sorted() so split assignment is deterministic across machines/filesystems —
+    # os.listdir() order is not portable, and the greedy split assignment below
+    # is sensitive to iteration order.
+    originals_files = sorted(os.listdir(originals_subdir)) if os.path.isdir(originals_subdir) else []
+    augmented_files = sorted(os.listdir(augmented_subdir)) if os.path.isdir(augmented_subdir) else []
+    if split_seed is not None:
+        import random as _random
+        rng = _random.Random(split_seed)
+        rng.shuffle(originals_files)
 
     song_splits = {}
     split_counts = defaultdict(int)
@@ -108,9 +129,18 @@ def create_song_list(directory, split_ratios=None, custom_test_songs=None):
                     break
             if wav_file:
                 original_pairs.append((f, wav_file, title))
-                # If the title contains any custom test song substring, force split to "test".
-                if any(custom in title.lower() for custom in custom_test_songs):
+                title_lower = title.lower()
+                matches_test = any(c in title_lower for c in custom_test_songs)
+                matches_val = any(c in title_lower for c in custom_validation_songs)
+                if matches_test and matches_val:
+                    print(
+                        f"WARNING: '{title}' matches both --custom-test-songs and "
+                        f"--custom-validation-songs; assigning to test."
+                    )
+                if matches_test:
                     split = 'test'
+                elif matches_val:
+                    split = 'validation'
                 else:
                     split = get_split_status(song_splits, title, split_ratios)
                 song_splits[title] = split
@@ -211,6 +241,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--custom-test-songs', type=str, default="", help="Comma-separated list of song names to force as test (originals only)"
     )
+    parser.add_argument(
+        '--custom-validation-songs', type=str, default="", help="Comma-separated list of song names to force as validation (originals only)"
+    )
 
     args = parser.parse_args()
     ratios = {
@@ -224,4 +257,5 @@ if __name__ == "__main__":
         exit(1)
 
     custom_test_songs = [s.strip() for s in args.custom_test_songs.split(",") if s.strip()]
-    create_song_list(args.directory, ratios, custom_test_songs)
+    custom_validation_songs = [s.strip() for s in args.custom_validation_songs.split(",") if s.strip()]
+    create_song_list(args.directory, ratios, custom_test_songs, custom_validation_songs)

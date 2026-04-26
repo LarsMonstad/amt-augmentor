@@ -1,6 +1,7 @@
 import os
 import argparse
 import random
+import shutil
 import string
 from pedalboard import Pedalboard, Chorus, Distortion
 from pedalboard.io import AudioFile
@@ -56,8 +57,8 @@ def apply_gain_and_chorus(
     # Generate the ann file path in the same directory as the output audio
     output_ann_file_path = os.path.splitext(output_audio_file_path)[0] + ".ann"
 
-    # Copy the annotation file
-    os.system(f'cp "{input_ann_file}" "{output_ann_file_path}"')
+    # Copy the annotation file (shutil avoids shell quoting issues with weird filenames)
+    shutil.copy2(input_ann_file, output_ann_file_path)
 
     return output_ann_file_path
 

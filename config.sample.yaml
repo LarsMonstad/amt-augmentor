@@ -53,6 +53,17 @@ gain_chorus:
     - 1.0   # Medium chorus
     - 2.0   # Fast chorus
 
+# Audio merge configuration
+# WARNING: disabled by default. The merge effect mixes the source song with N
+# other originals from the same dataset, but at augmentation time the splits
+# have not yet been decided. The merged "augmented" output is later added to
+# train, but it can contain audio from songs that end up in test or validation
+# — i.e. cross-split leakage. Only enable if you pin every test/validation
+# song explicitly with --custom-test-songs / --custom-validation-songs.
+merge_audio:
+  enabled: false
+  merge_num: 1
+
 # Pause manipulation configuration
 add_pause:
   enabled: true

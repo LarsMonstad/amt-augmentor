@@ -308,17 +308,14 @@ def process_effect(
                     generated_factors.add(stretch_factor)
                     
             else:
-                generated_factors = set(list(np.linspace(min_factor,
-                                                         max_factor,
-                                                         variations+1,
-                                                         dtype=float)))
-                try:
-                    generated_factors.remove(1.0)
-                except KeyError:
-                    pass
-                    
-                while len(generated_factors) > variations:
-                    generated_factors.pop()
+                # Evenly spaced factors, no-op (1.0) excluded, deterministic
+                # ordering — set.pop() previously could drop an arbitrary value.
+                _factors = sorted(set(np.linspace(
+                    min_factor, max_factor, variations + 1, dtype=float
+                )))
+                if 1.0 in _factors:
+                    _factors.remove(1.0)
+                generated_factors = set(_factors[:variations])
                     
             for stretch_factor in generated_factors:
                 random_suffix: str = random_word(5) if config.enable_random_suffix else ''
@@ -371,22 +368,18 @@ def process_effect(
 
                     generated_semitones.add(semitones)
             else:
-                generated_semitones = set(list(np.linspace(min_semitones,
-                                                            max_semitones,
-                                                            variations+1,
-                                                            dtype=int)))
-                try:
-                    generated_semitones.remove(0)
-                except KeyError:
-                    pass
-                    
-                if len(generated_semitones) < variations:
+                # Deterministic ordering — set.pop() previously could drop an
+                # arbitrary value, defeating --seed reproducibility.
+                _semis = sorted(set(np.linspace(
+                    min_semitones, max_semitones, variations + 1, dtype=int
+                )))
+                if 0 in _semis:
+                    _semis.remove(0)
+                if len(_semis) < variations:
                     logger.warning(
                         f"Impossible to have {variations} unique semitones values"
                     )
-                    
-                while len(generated_semitones) > variations:
-                    generated_semitones.pop()
+                generated_semitones = set(_semis[:variations])
 
             for semitones in generated_semitones:
                 random_suffix: str = random_word(5) if config.enable_random_suffix else ''
@@ -617,19 +610,14 @@ def process_effect(
                     generated_intensities.add(intensity)
 
             else:
-                # Use linspace for evenly spaced values in the range
-                generated_intensities = set([round(x, 3) for x in
-                                           np.linspace(min_intensity,
-                                                      max_intensity,
-                                                      variations,
-                                                      dtype=float)])
-                try:
-                    generated_intensities.remove(1.0)
-                except KeyError:
-                    pass
-
-                while len(generated_intensities) > variations:
-                    generated_intensities.pop()
+                # Use linspace for evenly spaced values in the range; sort for
+                # deterministic truncation (set.pop() is unordered).
+                _intensities = sorted({round(x, 3) for x in np.linspace(
+                    min_intensity, max_intensity, variations, dtype=float
+                )})
+                if 1.0 in _intensities:
+                    _intensities.remove(1.0)
+                generated_intensities = set(_intensities[:variations])
 
             for intensity in generated_intensities:
                 random_suffix: str = random_word(5) if config.enable_random_suffix else ''
@@ -649,7 +637,7 @@ def process_effect(
                     if output_ann_file:
                         new_ann_files.append(output_ann_file)
                 except Exception as e:
-                    logger.error("Error applying gain and chorus: %s", e)
+                    logger.error("Error applying noise: %s", e)
 
         return new_ann_files
 
@@ -936,6 +924,10 @@ def main() -> None:
         "--custom-test-songs", type=str, default="",
         help="Comma-separated list of song names to force as test (originals only, no augmented versions)"
     )
+    parser.add_argument(
+        "--custom-validation-songs", type=str, default="",
+        help="Comma-separated list of song names to force as validation (originals only, no augmented versions)"
+    )
 
     # Dataset validation (standalone — no side effects)
     parser.add_argument(
@@ -1014,7 +1006,16 @@ def main() -> None:
     parser.add_argument(
         "--seed",
         type=int,
-        help="Random seed for reproducible augmentation parameters"
+        help="Random seed for reproducible augmentation parameters. NOTE: "
+             "forces single-worker processing, since ProcessPoolExecutor "
+             "subprocesses do not inherit the parent's RNG state."
+    )
+    parser.add_argument(
+        "--split-seed",
+        type=int,
+        help="Random seed for shuffling originals before greedy split "
+             "assignment. Defaults to --seed when --seed is set; otherwise "
+             "splits are deterministic by sorted filename."
     )
 
     args = parser.parse_args()
@@ -1242,6 +1243,17 @@ def main() -> None:
     if args.num_workers > 0:
         config.processing.num_workers = args.num_workers
 
+    # ProcessPoolExecutor workers spawn fresh interpreters and do not inherit
+    # the parent's RNG state, which silently breaks --seed reproducibility.
+    # Force single-worker processing whenever --seed is set.
+    if args.seed is not None and config.processing.num_workers > 1:
+        logger.warning(
+            f"--seed={args.seed} requested; forcing num_workers=1 to keep "
+            f"augmentation parameters reproducible (was "
+            f"{config.processing.num_workers})."
+        )
+        config.processing.num_workers = 1
+
     # Disable specified effects
     if args.disable_effect:
         for effect in args.disable_effect:
@@ -1259,6 +1271,20 @@ def main() -> None:
                 config.merge_audio.enabled = False
             elif effect == "noise":
                 config.add_noise.enabled = False
+
+    # Merge effect can leak across splits — see AudioMergeConfig docstring.
+    # Warn loudly if the user (or their YAML) re-enables it.
+    if config.merge_audio.enabled:
+        logger.warning(
+            "merge_audio is enabled. The current implementation can introduce "
+            "cross-split contamination (audio from a future test/validation song "
+            "may end up in a train-tagged augmented file). Disable in your config "
+            "or pin all splits via --custom-test-songs / --custom-validation-songs."
+        )
+        print(
+            "WARNING: merge_audio is enabled. This can leak audio across "
+            "train/test/validation splits — see config docstring."
+        )
 
     # Setup output directory. The dataset is organised into two subfolders:
     #   <output_directory>/original/   pristine input audio+MIDI pairs
@@ -1365,9 +1391,8 @@ def main() -> None:
     logger.info("%s", audio_files_described)
     for audio, standardized_audio, temp_ann_file in audio_files_described:
         matching_midi = os.path.splitext(audio)[0] + ".mid"
-        midi_path = matching_midi
+        midi_path = os.path.join(originals_dir, matching_midi)
 
-        print(midi_path)
         if os.path.exists(midi_path):
             logger.info("Processing %s with %s", audio, matching_midi)
             try:
@@ -1410,10 +1435,22 @@ def main() -> None:
             'validation': args.validation_ratio if args.validation_ratio else 0.15
         }
 
-        # Parse custom test songs if provided
+        # Parse custom test/validation songs if provided
         custom_test_songs = [s.strip() for s in args.custom_test_songs.split(",") if s.strip()]
+        custom_validation_songs = [
+            s.strip() for s in args.custom_validation_songs.split(",") if s.strip()
+        ]
 
-        csv_path = create_song_list(dataset_dir, split_ratios=split_ratios, custom_test_songs=custom_test_songs)
+        # split-seed defaults to --seed when explicit seed is provided.
+        split_seed = args.split_seed if args.split_seed is not None else args.seed
+
+        csv_path = create_song_list(
+            dataset_dir,
+            split_ratios=split_ratios,
+            custom_test_songs=custom_test_songs,
+            custom_validation_songs=custom_validation_songs,
+            split_seed=split_seed,
+        )
 
         logger.info("Validating dataset split...")
         validate_dataset_split(csv_path)

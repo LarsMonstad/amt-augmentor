@@ -90,9 +90,18 @@ class AddPauseConfig:
 
 @dataclass
 class AudioMergeConfig:
-    """Configuration for merging of multiple audio files"""
+    """Configuration for merging of multiple audio files.
 
-    enabled: bool = True
+    NOTE: disabled by default because the current implementation can produce
+    cross-split contamination — at augmentation time, splits have not yet been
+    decided, so a merged "augmented" file (added to train) may contain audio
+    from songs that later land in test or validation. Re-enable only if you
+    pin all split membership upfront via --custom-test-songs and
+    --custom-validation-songs (and, ideally, only after a future release that
+    makes augmentation split-aware).
+    """
+
+    enabled: bool = False
     merge_num: int = 1
 
 @dataclass
