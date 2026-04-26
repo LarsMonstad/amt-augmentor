@@ -2,6 +2,15 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [1.2.1]
+
+### Fixed
+- Songs pinned to test/validation via `--custom-test-songs` /
+  `--custom-validation-songs` are now also skipped at augmentation time,
+  not just excluded from the CSV. Previously the pipeline still wrote
+  augmented WAVs/MIDIs for those songs to `augmented/` (orphaned files
+  that did not appear in the CSV — wasted compute and disk).
+
 ## [1.2.0]
 
 ### Fixed

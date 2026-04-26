@@ -48,6 +48,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def filter_pinned_songs(
+    audio_files: List[str],
+    custom_test_songs: List[str],
+    custom_validation_songs: List[str],
+) -> List[str]:
+    """Drop originals matched by any custom test/validation substring.
+
+    Pinned songs must not enter the augmentation loop — they are held-out
+    evaluation data. Substring matching is case-insensitive on the file stem,
+    matching the rule applied later in ``create_song_list``.
+    """
+    excluded = [s.lower() for s in custom_test_songs + custom_validation_songs if s]
+    if not excluded:
+        return list(audio_files)
+    return [
+        f for f in audio_files
+        if not any(c in os.path.splitext(f)[0].lower() for c in excluded)
+    ]
+
+
 def grab_audios(input_directory: str) -> List[str]:
     return [
         os.path.basename(f)
@@ -1320,6 +1340,21 @@ def main() -> None:
     audio_files = [
         f for f in audio_files if not any(keyword in f for keyword in effect_keywords)
     ]
+
+    # Songs pinned to test/validation must not be augmented at all — neither in
+    # the CSV (already enforced in create_song_list) nor on disk. Drop them
+    # from the augmentation queue using the same substring rules
+    # create_song_list applies, so the two stages stay consistent.
+    _custom_test = [s.strip() for s in args.custom_test_songs.split(",") if s.strip()]
+    _custom_val = [s.strip() for s in args.custom_validation_songs.split(",") if s.strip()]
+    before = len(audio_files)
+    audio_files = filter_pinned_songs(audio_files, _custom_test, _custom_val)
+    skipped = before - len(audio_files)
+    if skipped:
+        logger.info(
+            f"Skipping augmentation for {skipped} song(s) pinned to "
+            f"test/validation via --custom-test-songs / --custom-validation-songs"
+        )
 
     if not audio_files:
         logger.error("No unprocessed audio files found in the input directory")

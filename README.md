@@ -218,7 +218,12 @@ amt-augmentor /path/to/directory --custom-validation-songs "song2,song4"
 
 `--custom-test-songs` and `--custom-validation-songs` use case-insensitive
 substring matching against the song stem. If the same title matches both lists,
-test wins and a warning is printed.
+test wins and a warning is printed. Pinned songs are also **skipped at
+augmentation time** — no augmented WAVs/MIDIs are written for them — so
+held-out evaluation data stays untouched on disk and in the CSV. Substring
+matching means `--custom-test-songs "Spretten"` will pin every variant
+(`Spretten_original1`, `Spretten_angry`, `Spretten_sad`, ...) to the same
+split.
 
 ### Validating the Dataset Split
 

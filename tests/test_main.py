@@ -14,7 +14,31 @@ from amt_augmentor.main import (
     midi_to_ann,
     ann_to_midi,
     check_matching_files,
+    filter_pinned_songs,
 )
+
+
+def test_filter_pinned_songs_substring_match():
+    """Custom-songs flags use case-insensitive substring matching: pinning
+    'Spretten' must drop Spretten_original1, Spretten_angry, Spretten_sad."""
+    audio_files = [
+        "Spretten_original1.wav",
+        "Spretten_angry.wav",
+        "Spretten_sad.wav",
+        "Vossarull_happy.wav",
+        "Valdresspringar_tender.wav",
+    ]
+    out = filter_pinned_songs(audio_files, ["Spretten"], ["Valdresspringar"])
+    assert sorted(out) == ["Vossarull_happy.wav"]
+
+
+def test_filter_pinned_songs_case_insensitive():
+    out = filter_pinned_songs(["FooBar.wav", "foobar_angry.wav", "Other.wav"], ["FOOBAR"], [])
+    assert out == ["Other.wav"]
+
+
+def test_filter_pinned_songs_empty_lists_returns_all():
+    assert filter_pinned_songs(["a.wav", "b.wav"], [], []) == ["a.wav", "b.wav"]
 
 
 def test_random_word():
