@@ -160,6 +160,44 @@ class TestMainCLIIntegration:
         assert len(custom_songs) == 3, f"Expected 3 custom songs, got {len(custom_songs)}"
 
     @patch('amt_augmentor.main.create_song_list')
+    def test_processing_loop_reaches_process_files(self, mock_create_song_list):
+        """Regression test for the v1.2.1 double-prefix bug.
+
+        gen_ann returns the originals_dir-prefixed path as input_audio_file. The
+        downstream loop must derive its midi_path from the basename, not by
+        re-joining the already-prefixed path with originals_dir. If it doesn't,
+        os.path.exists fails for every file and process_files is never called —
+        which is exactly what happened in v1.2.1.
+        """
+        mock_create_song_list.return_value = "test.csv"
+
+        test_args = ['amt-augmentor', self.test_dir]
+
+        with patch.object(sys, 'argv', test_args):
+            from amt_augmentor.main import main
+
+            with patch('amt_augmentor.main.process_files') as mock_process:
+                # gen_ann is called per-file. Have it write a real .mid alongside
+                # the tmp original/ subdir so os.path.exists() returns True for
+                # the audio's paired MIDI in the second loop.
+                def _fake_gen_ann(input_directory, input_audio_file, input_midi_file, output_directory, config):
+                    # input_audio_file is originals_dir/<basename>; just echo it back.
+                    return (input_audio_file, input_audio_file, "ignored.ann")
+
+                with patch('amt_augmentor.main.gen_ann', side_effect=_fake_gen_ann):
+                    with patch('amt_augmentor.main.validate_dataset_split'):
+                        main()
+
+        # The MIDI files exist on disk (create_test_dataset wrote them), so the
+        # processing loop must have reached process_files exactly once per song.
+        # Assert non-zero — if zero, we're shipping a silently-broken pipeline.
+        assert mock_process.call_count >= 1, (
+            "process_files was never called — the existence check in the "
+            "processing loop is rejecting every file (regression of the v1.2.1 "
+            "double-prefix midi_path bug)."
+        )
+
+    @patch('amt_augmentor.main.create_song_list')
     def test_custom_validation_songs_passed(self, mock_create_song_list):
         """--custom-validation-songs is parsed and forwarded to create_song_list."""
         mock_create_song_list.return_value = "test.csv"

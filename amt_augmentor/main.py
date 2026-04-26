@@ -1425,15 +1425,19 @@ def main() -> None:
 
     logger.info("%s", audio_files_described)
     for audio, standardized_audio, temp_ann_file in audio_files_described:
-        matching_midi = os.path.splitext(audio)[0] + ".mid"
+        # `audio` here is whatever gen_ann returned as input_audio_file —
+        # in our pipeline that's the originals_dir-prefixed path. Always
+        # derive from basename so this works regardless of caller convention.
+        audio_basename = os.path.basename(audio)
+        matching_midi = os.path.splitext(audio_basename)[0] + ".mid"
         midi_path = os.path.join(originals_dir, matching_midi)
 
         if os.path.exists(midi_path):
-            logger.info("Processing %s with %s", audio, matching_midi)
+            logger.info("Processing %s with %s", audio_basename, matching_midi)
             try:
                 process_files(
                     originals_dir,
-                    audio,
+                    audio_basename,
                     midi_path,
                     augmented_dir,
                     standardized_audio,

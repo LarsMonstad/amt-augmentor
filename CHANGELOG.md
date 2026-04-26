@@ -2,6 +2,18 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [1.2.2]
+
+### Fixed
+- **Hotfix for v1.2.1 silent no-op.** The processing loop's existence check
+  (`os.path.exists(midi_path)`) ran against a double-prefixed path because
+  `audio` from `audio_files_described` is already the originals_dir-prefixed
+  path returned by `gen_ann`, and v1.2.1 prepended `originals_dir` again.
+  Result: `os.path.exists` failed for every file and `process_files` was never
+  called — pipelines silently produced 0 augmented files. Loop now derives
+  paths from `os.path.basename(audio)` so it works regardless of caller
+  convention. Added a regression test that fails on v1.2.1's code.
+
 ## [1.2.1]
 
 ### Fixed
