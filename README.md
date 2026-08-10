@@ -18,6 +18,9 @@
 >
 > **Note:** Formerly known as `amt-augpy`. Starting with v1.0.9, the package is **`amt-augmentor`**.
 
+For the deterministic Galdr training-only O/C materializer, see
+[the Galdr conventional campaign guide](docs/GALDR_CONVENTIONAL_CAMPAIGN.md).
+
 A Python toolkit for augmenting Automatic Music Transcription (AMT) datasets
 through conventional audio transformations while maintaining synchronization
 between audio and MIDI files. The dataset follows the same metadata concepts as
@@ -377,7 +380,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {2.0.0a5},
+  version      = {2.0.0a6},
   year         = {2026},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

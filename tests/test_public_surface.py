@@ -21,7 +21,7 @@ REJECTED_PUBLIC_NAMES = {
 
 
 def test_package_exports_only_supported_transform_families():
-    assert amt_augmentor.__version__ == "2.0.0a5"
+    assert amt_augmentor.__version__ == "2.0.0a6"
     assert REJECTED_PUBLIC_NAMES.isdisjoint(amt_augmentor.__all__)
     for name in REJECTED_PUBLIC_NAMES:
         assert not hasattr(amt_augmentor, name)
@@ -33,6 +33,10 @@ def test_rejected_modules_and_console_entry_are_absent():
     assert not (package_directory / "galdr_campaign.py").exists()
     project = Path("pyproject.toml").read_text(encoding="utf-8")
     assert "amt-augmentor-galdr-campaign" not in project
+    assert (
+        "amt-augmentor-galdr-conventional = "
+        '"amt_augmentor.galdr_conventional_campaign:main"'
+    ) in project
 
 
 def test_legacy_range_masker_is_disabled_and_not_advertised(capsys, tmp_path):

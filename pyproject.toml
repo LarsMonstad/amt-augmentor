@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amt-augmentor"
-version = "2.0.0a5"
+version = "2.0.0a6"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
@@ -58,6 +58,7 @@ dev = [
 
 [project.scripts]
 amt-augmentor = "amt_augmentor.main:main"
+amt-augmentor-galdr-conventional = "amt_augmentor.galdr_conventional_campaign:main"
 
 [tool.setuptools.packages.find]
 include = ["amt_augmentor*"]

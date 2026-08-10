@@ -2,6 +2,23 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [2.0.0a6]
+
+### Added
+- A deterministic Galdr O/C planner and materializer limited to original
+  recordings and the five established conventional transform families.
+- Training-only metadata, Galdr-compatible source lineage, derivative manifests,
+  condition identities, complete payload hashes, and an independent verifier.
+- Bounded parallel rendering whose media and provenance are invariant to worker
+  count.
+
+### Changed
+- The conventional parameter and seed stream reuses the established
+  `galdr-sigma2/conventional-stream/v1` identity so accepted earlier C media can
+  be checked for byte-level equivalence without restoring rejected methods.
+- Galdr source annotations are normalized in derivative MIDI files; canonical
+  audio and MIDI remain hash-checked and unchanged.
+
 ## [2.0.0a5]
 
 ### Removed
