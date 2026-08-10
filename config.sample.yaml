@@ -64,15 +64,6 @@ merge_audio:
   enabled: false
   merge_num: 1
 
-# Pause manipulation configuration
-add_pause:
-  enabled: true
-  # Threshold to detect pauses (seconds)
-  pause_threshold: 0.0033
-  # Minimum and maximum pause duration to modify (seconds)
-  min_pause_duration: 1.0
-  max_pause_duration: 5.0
-
 # Processing configuration
 processing:
   # Number of parallel workers (set to 1 to disable parallelization)

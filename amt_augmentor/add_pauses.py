@@ -1,15 +1,16 @@
-"""
-Module for detecting and manipulating musical pauses in audio files.
+"""Legacy range-masking implementation retained for reproducibility.
 
-This module identifies pauses between notes in audio files using annotation data
-and can insert silence at appropriate points without cutting off notes. It is based on
-research from "Composer Classification with Cross-Modal Transfer Learning and
-Musically-Informed Augmentation" (ISMIR).
+Despite its historical ``add_pauses`` name, this module replaces existing
+audio ranges and removes only annotations fully contained by those ranges.  It
+does not insert time, and partially intersecting annotations can remain over
+masked audio. It is rejected for new paired-audio/MIDI experiments and remains
+only so historical runs can be reproduced from an explicit legacy config.
 """
 
 import sys
 import os
 import logging
+import warnings
 from typing import List, Tuple, Optional
 
 import librosa
@@ -146,7 +147,7 @@ def calculate_time_distance(
     max_pause_duration: float = 5.0,
 ) -> Optional[str]:
     """
-    Detect pauses between notes and insert silence at appropriate points.
+    Reproduce the historical range-masking behavior.
 
     Args:
         audio_filename: Path to the input audio file
@@ -157,12 +158,19 @@ def calculate_time_distance(
         max_pause_duration: Maximum pause duration to modify (default: 5.0s)
 
     Returns:
-        Path to the output annotation file, or None if no pauses were found
+        Path to the output annotation file, or None if no ranges were selected
 
     Raises:
         FileNotFoundError: If the annotation file doesn't exist
         Exception: For other processing errors
     """
+    warnings.warn(
+        "UNSAFE FORENSIC-ONLY legacy_addpauses_unsafe: this rejected method "
+        "masks existing audio and can leave partially intersecting MIDI "
+        "labels. Do not use it for new training data.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     try:
         with open(ann_filename, "r", encoding="utf-8") as file:
             lines = file.readlines()
@@ -235,6 +243,11 @@ def calculate_time_distance(
     except Exception as e:
         logger.error("Error in calculate_time_distance: %s", str(e))
         raise
+
+
+# Explicit forensic name for reproducing pre-v2 experiments.  Keep the old
+# public function above for compatibility, but do not use it in new datasets.
+legacy_addpauses_unsafe = calculate_time_distance
 
 
 if __name__ == "__main__":

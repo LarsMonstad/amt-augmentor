@@ -1,76 +1,158 @@
-import librosa
-import soundfile as sf
+"""Audio-format conversion helpers.
+
+Conversion is deliberately non-destructive: the source recording is never
+replaced or deleted.  Callers receive the path of a separate standardized WAV
+and are responsible for removing that working copy when it is no longer
+needed.
+"""
+
 import os
+import tempfile
+from pathlib import Path
+from typing import Optional, Tuple
+
+import librosa
+import numpy as np
+import soundfile as sf
 
 
-def standardize_audio(input_file, target_sr=44100):
-    """
-    Standardize audio file to 44.1kHz WAV format by overwriting the original if needed.
+def _default_output_path(source: Path) -> Path:
+    """Return a distinct, predictable WAV path for a converted source."""
+
+    if source.suffix.lower() == ".wav":
+        return source.with_name(f"{source.stem}.standardized.wav")
+    return source.with_suffix(".wav")
+
+
+def standardize_audio(
+    input_file: os.PathLike,
+    target_sr: int = 44100,
+    output_file: Optional[os.PathLike] = None,
+) -> Tuple[str, bool]:
+    """Return audio in WAV format at ``target_sr`` without mutating the source.
+
+    The input is returned unchanged when it is already a WAV at the requested
+    sample rate.  Otherwise, a separate WAV is written to ``output_file``.  If
+    no destination is supplied, non-WAV inputs use the same stem with a
+    ``.wav`` suffix and WAV inputs use ``<stem>.standardized.wav``.
+
+    Multichannel inputs remain multichannel.  Existing destinations and a
+    destination resolving to the source path are rejected.
+
     Returns:
-        tuple: (file_path, was_converted)
+        ``(file_path, was_converted)``
     """
-    # Load audio with original sample rate
-    y, sr = librosa.load(input_file, sr=None)
 
-    # Check if conversion is needed
-    base, ext = os.path.splitext(input_file)
-    needs_conversion = sr != target_sr or ext.lower() not in [".wav"]
+    if type(target_sr) is not int or target_sr <= 0:
+        raise ValueError("target_sr must be a positive built-in int")
 
-    if needs_conversion:
-        # Resample if needed
-        if sr != target_sr:
-            y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+    source = Path(input_file)
+    if not source.is_file():
+        raise FileNotFoundError(f"Audio file not found: {source}")
 
-        # Create temporary filename and specify the format explicitly
-        temp_file = input_file + ".temp"
+    # ``mono=False`` is essential here: librosa otherwise folds every input
+    # down to one channel before we have a chance to inspect or resample it.
+    audio, source_sr = librosa.load(str(source), sr=None, mono=False)
+    audio = np.asarray(audio)
+    if audio.ndim not in (1, 2) or audio.size == 0:
+        raise ValueError(f"Audio must contain one or more non-empty channels: {source}")
+    if not np.isfinite(audio).all():
+        raise ValueError(f"Audio contains NaN or infinite samples: {source}")
 
-        # Save as WAV with explicit format specification
-        sf.write(temp_file, y, target_sr, format="WAV", subtype="PCM_16")
+    needs_conversion = source_sr != target_sr or source.suffix.lower() != ".wav"
+    if not needs_conversion:
+        return str(source), False
 
-        # Verify the temp file was written before removing the original — if the
-        # write was interrupted or sf.write produced an empty file we must NOT
-        # delete the user's source audio.
-        if not os.path.exists(temp_file) or os.path.getsize(temp_file) == 0:
-            try:
-                os.remove(temp_file)
-            except OSError:
-                pass
+    target = (
+        Path(output_file)
+        if output_file is not None
+        else _default_output_path(source)
+    )
+    if source.resolve(strict=False) == target.resolve(strict=False):
+        raise ValueError("Standardized output must be distinct from the source audio")
+    if os.path.lexists(target):
+        raise FileExistsError(f"Refusing to overwrite existing output: {target}")
+
+    if source_sr != target_sr:
+        # librosa represents multichannel audio as channels-by-samples and
+        # resamples along the final (sample) axis.
+        audio = librosa.resample(
+            audio,
+            orig_sr=source_sr,
+            target_sr=target_sr,
+            axis=-1,
+        )
+
+    channels = 1 if audio.ndim == 1 else int(audio.shape[0])
+    samples_by_channels = audio if audio.ndim == 1 else audio.T
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        dir=str(target.parent),
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    )
+    os.close(file_descriptor)
+    temporary = Path(temporary_name)
+    try:
+        sf.write(
+            str(temporary),
+            samples_by_channels,
+            target_sr,
+            format="WAV",
+            subtype="PCM_16",
+        )
+        info = sf.info(str(temporary))
+        if (
+            temporary.stat().st_size <= 0
+            or info.frames <= 0
+            or info.samplerate != target_sr
+            or info.channels != channels
+        ):
             raise IOError(
-                f"Failed to write standardized audio for {input_file}; "
-                "original file is unchanged."
+                f"Failed to verify standardized audio for {source}; "
+                "source audio is unchanged."
             )
 
-        new_path = base + ".wav"
-        # If the original is .wav we'd be replacing it with itself; rename then
-        # the temp into place. Otherwise rename the temp first, *then* delete
-        # the original — so an interrupted run never loses the source.
-        if new_path == input_file:
-            os.replace(temp_file, new_path)
-        else:
-            os.rename(temp_file, new_path)
-            os.remove(input_file)
-        print(f"Converted {os.path.basename(input_file)} to 44.1kHz WAV")
-        return new_path, True
+        # Preserve the source's permission bits, then publish with a hard link.
+        # The hard-link operation is atomic and fails if another process created
+        # the destination after the existence check above.
+        os.chmod(temporary, source.stat().st_mode & 0o777)
+        os.link(temporary, target)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
-    return input_file, False
+    print(
+        f"Converted {source.name} to {target_sr} Hz WAV at {target}; "
+        "source retained"
+    )
+    return str(target), True
 
 
 def process_audio_directory(input_directory, target_sr=44100):
-    """
-    Convert all audio files in directory to 44.1kHz WAV.
-    """
+    """Create non-destructive standardized copies for audio in a directory."""
+
     audio_files = [
         f
         for f in os.listdir(input_directory)
-        if f.endswith((".wav", ".flac", ".mp3", ".m4a", ".aiff"))
+        if f.lower().endswith((".wav", ".flac", ".mp3", ".m4a", ".aiff"))
     ]
+    standardized_directory = Path(input_directory) / "standardized"
 
     for audio_file in audio_files:
-        input_path = os.path.join(input_directory, audio_file)
+        input_path = Path(input_directory) / audio_file
+        output_path = standardized_directory / f"{input_path.stem}.wav"
         try:
-            standardized_path, was_converted = standardize_audio(input_path, target_sr)
+            standardized_path, was_converted = standardize_audio(
+                input_path,
+                target_sr,
+                output_path,
+            )
             if was_converted:
-                print(f"Converted {audio_file} to 44.1kHz WAV")
+                print(f"Standardized copy: {standardized_path}")
             else:
                 print(f"{audio_file} already in correct format")
 
@@ -83,7 +165,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Standardize audio files to 44.1kHz WAV"
+        description="Create non-destructive 44.1 kHz WAV copies of audio files"
     )
     parser.add_argument("input_directory", help="Directory containing audio files")
     parser.add_argument(

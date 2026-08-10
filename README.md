@@ -18,7 +18,10 @@
 >
 > **Note:** Formerly known as `amt-augpy`. Starting with v1.0.9, the package is **`amt-augmentor`**.
 
-A Python toolkit for augmenting Automatic Music Transcription (AMT) datasets through various audio transformations while maintaining synchronization between audio and MIDI files. The dataset follows the same format as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro), which is commonly used for Automatic Music Transcription (AMT) tasks. 
+A Python toolkit for augmenting Automatic Music Transcription (AMT) datasets
+through conventional audio transformations while maintaining synchronization
+between audio and MIDI files. The dataset follows the same metadata concepts as
+[MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro).
 
 The toolkit expects a folder containing paired audio and MIDI files with matching names. The audio file and MIDI file must be ground truth data, as this toolkit is only for augmenting existing datasets - a common technique in Machine Learning.
 
@@ -36,11 +39,12 @@ dataset/
 - **Reverb & Filtering**: Room acoustics and frequency filtering effects
 - **Gain & Chorus**: Depth and richness enhancement
 - **Noise Augmentation**: Controlled noise addition for robustness training
-- **Pause Manipulation**: Detection and modification of musical pauses
-- **Audio Merging**: Combine multiple audio files into one for complex training scenarios
+- **Legacy Audio Merging**: Disabled by default because sources must be assigned
+  to splits before any merge can be shown to be leakage-safe
 
 ### Processing & Dataset Handling
-- **Audio Standardization**: Conversion to 44.1kHz WAV format
+- **Audio Standardization**: Channel-preserving, non-destructive conversion to
+  44.1 kHz WAV working copies
 - **Parallel Processing**: Multi-core processing for faster augmentation
 - **Configuration System**: YAML-based parameter customization
 - **Dataset Validation**: Automatic validation of train/test/validation splits
@@ -49,7 +53,57 @@ dataset/
 
 ## Why AMT-Augmentor?
 
-Built for AMT, not just audio. Unlike general audio augmenters, AMT-Augmentor keeps paired audio+MIDI aligned by applying transform-consistent updates to MIDI (transpose for pitch shift, time-scale for stretch) and ships MAESTRO-style dataset tools (CSV builder + split validation) to avoid leakage. It also supports semitone/time-aware transforms and reproducible runs via --seed.
+Built for AMT, not just audio. Unlike general audio augmenters, AMT-Augmentor
+keeps paired audio and MIDI aligned by applying transform-consistent updates to
+the labels: pitch shift transposes MIDI, while time stretch maps every event by
+the realized output-sample ratio. The toolkit also provides MAESTRO-style CSV
+construction and split validation.
+
+## Deterministic conventional transforms
+
+The supported research-facing API covers the toolbox's established
+conventional transformations: gain/chorus, target-SNR noise,
+reverb/filtering, integral pitch shift, and time stretch. The work here mainly
+makes the existing toolbox deterministic, synchronized with MIDI, validated,
+and provenance-tracked. Similar-sounding results are expected, not a failure;
+the scientific question is whether these controlled transforms improve model
+generalization.
+
+```python
+from amt_augmentor import NoiseSNRParameters, noise_snr_v1
+
+noise_snr_v1(
+    "tune.wav",
+    "tune.mid",
+    "tune_augmented_noise.wav",
+    "tune_augmented_noise.mid",
+    seed=42,
+    parameters=NoiseSNRParameters(target_snr_db=24.0),
+)
+```
+
+Each function requires explicit finite parameters and a nonnegative integer
+seed. It refuses to overwrite source or output files, validates the audio/MIDI
+pair (including note bounds), preserves channel count, and writes a JSON
+provenance sidecar with source/output hashes and the exact parameter plan.
+Time-stretched and pitch-shifted labels are serialized as high-resolution,
+constant-tempo AMT annotations; they are not intended as symbolic scores with
+an inherited tempo map.
+
+The audio, MIDI, and provenance files form one logical bundle. Payloads are
+staged first, the provenance sidecar is published last as the completion
+marker, and caught failures are rolled back. Consumers should only accept a
+bundle when the sidecar exists and its hashes match.
+
+Mixed-audio note removal, experimental synthetic pause insertion, and the
+former five-condition Galdr materializer were withdrawn after review and are
+not part of the package API. Their prototypes remain available through Git
+history only. The historical `add_pause` implementation is retained solely to
+reproduce old runs because the legacy CLI depends on it. It is disabled by
+default, omitted from the advertised effects, emits a visible warning when
+explicitly enabled, and must not be used for new training data. See
+[`docs/AUGMENTATION_SCOPE.md`](docs/AUGMENTATION_SCOPE.md) for the decision and
+current evaluation scope.
 
 ## Requirements
 
@@ -111,7 +165,7 @@ amt-augmentor --generate-config my_config.yaml
 # Disable specific effects
 amt-augmentor /path/to/dataset/directory --disable-effect timestretch --disable-effect chorus
 
-# Control merge behavior via the YAML config (merge.merge_num)
+# Control legacy merge behavior via the YAML config (merge_audio.merge_num)
 # (no CLI flag — see config.sample.yaml for the merge_audio.merge_num key)
 
 # Modify existing dataset CSV files
@@ -189,8 +243,6 @@ and handled during dataset creation. Example of `augmented/` contents:
     piano_augmented_timestretch_1.2_abc123.mid
     piano_augmented_noise_1.5_def456.wav
     piano_augmented_noise_1.5_def456.mid
-    piano_augmented_merge_piano2_ghi789.wav
-    piano_augmented_merge_piano2_ghi789.mid
 
 The generated CSV references files with their subfolder prefix
 (`<dataset>/original/...` and `<dataset>/augmented/...`), so the physical
@@ -325,8 +377,8 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {1.1.2},
-  year         = {2025},
+  version      = {2.0.0a5},
+  year         = {2026},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}
 }

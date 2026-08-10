@@ -43,11 +43,6 @@ gain_chorus:
   - 0.5
   - 1.0
   - 2.0
-add_pause:
-  enabled: true
-  pause_threshold: 0.0033
-  min_pause_duration: 1
-  max_pause_duration: 5
 processing:
   num_workers: 4
   cache_dir: null

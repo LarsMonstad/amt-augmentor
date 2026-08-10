@@ -1,6 +1,4 @@
-"""
-Tests for add_pauses module.
-"""
+"""Forensic regression tests for the rejected historical range masker."""
 
 import os
 import tempfile
@@ -16,7 +14,7 @@ from amt_augmentor.add_pauses import (
 
 
 class TestAddPauses:
-    """Test pause detection and silence insertion functionality."""
+    """Preserve historical behavior without endorsing it for new data."""
 
     def setup_method(self):
         """Set up test files."""

@@ -261,7 +261,8 @@ def process_effect(
 
     Args:
         input_directory: Path to the input dataset
-        effect_type: Type of effect to apply ('pauses', 'timestretch', 'pitchshift', 'reverb', 'chorus', 'merge')
+        effect_type: Internal effect identifier. ``pauses`` exists only for
+            forensic reproduction of the rejected historical range masker.
         audio_base: Base name of the audio file
         audio_ext: Extension of the audio file
         standardized_audio: Path to the standardized audio file
@@ -276,8 +277,10 @@ def process_effect(
 
     try:
         if effect_type == "pauses" and config.add_pause.enabled:
-            # Apply pauses
-            logger.info("Applying pause manipulation")
+            logger.warning(
+                "Running rejected forensic-only legacy_addpauses_unsafe; "
+                "do not use this output for new training data"
+            )
             random_suffix: str = random_word(5) if config.enable_random_suffix else ''
             output_filename = generate_output_filename(
                 audio_base, "addpauses", 1, random_suffix, audio_ext
@@ -680,9 +683,20 @@ def gen_ann(
         logger.info("Using output directory from config: %s", output_directory)
         os.makedirs(output_directory, exist_ok=True)
 
-    # First standardize the audio file
+    # First standardize the audio file.  Converted audio is a disposable work
+    # copy under augmented/.standardized-work; the source recording remains
+    # byte-for-byte untouched.
     logger.info("Standardizing audio: %s", input_audio_file)
-    standardized_audio, was_converted = standardize_audio(input_audio_file)
+    source_stem = os.path.splitext(os.path.basename(input_audio_file))[0]
+    standardized_work_file = os.path.join(
+        output_directory,
+        ".standardized-work",
+        f"{source_stem}.wav",
+    )
+    standardized_audio, was_converted = standardize_audio(
+        input_audio_file,
+        output_file=standardized_work_file,
+    )
     if was_converted:
         logger.info("Converted audio format to: %s", standardized_audio)
 
@@ -692,7 +706,12 @@ def gen_ann(
     # Convert input MIDI to ANN
     temp_ann_file = os.path.join(output_directory, f"{audio_base}_temp.ann")
     logger.info("Converting MIDI to annotation: %s", input_midi_file)
-    midi_to_ann(input_midi_file, temp_ann_file)
+    try:
+        midi_to_ann(input_midi_file, temp_ann_file)
+    except Exception:
+        if was_converted:
+            delete_file(standardized_audio)
+        raise
 
     return (input_audio_file, standardized_audio, temp_ann_file)
 
@@ -923,7 +942,7 @@ def main() -> None:
         "--disable-effect",
         "-d",
         action="append",
-        choices=["pauses", "timestretch", "pitchshift", "reverb", "chorus", "merge", "noise"],
+        choices=["timestretch", "pitchshift", "reverb", "chorus", "merge", "noise"],
         help="Disable specific effect (can be used multiple times)",
     )
 
@@ -1211,7 +1230,6 @@ def main() -> None:
         print("  - pitchshift     : Shift pitch up or down by semitones")
         print("  - reverb         : Add reverb with room simulation")
         print("  - chorus         : Add chorus effect with adjustable depth")
-        print("  - pauses         : Manipulate pauses in audio")
         print("  - merge          : Merge multiple audio files")
         print("  - noise          : Add noise to audio files")
         print("\nUse --disable-effect <effect_name> to disable specific effects")
@@ -1277,9 +1295,7 @@ def main() -> None:
     # Disable specified effects
     if args.disable_effect:
         for effect in args.disable_effect:
-            if effect == "pauses":
-                config.add_pause.enabled = False
-            elif effect == "timestretch":
+            if effect == "timestretch":
                 config.time_stretch.enabled = False
             elif effect == "pitchshift":
                 config.pitch_shift.enabled = False
@@ -1304,6 +1320,17 @@ def main() -> None:
         print(
             "WARNING: merge_audio is enabled. This can leak audio across "
             "train/test/validation splits — see config docstring."
+        )
+
+    if config.add_pause.enabled:
+        logger.warning(
+            "UNSAFE FORENSIC MODE: add_pause explicitly enables the rejected "
+            "legacy range masker. It is retained only to reproduce old runs "
+            "and must not be used for new training data."
+        )
+        print(
+            "WARNING: add_pause enables rejected forensic-only range masking; "
+            "do not use its output for new training data."
         )
 
     # Setup output directory. The dataset is organised into two subfolders:
@@ -1388,7 +1415,7 @@ def main() -> None:
         if config.gain_chorus.enabled:
             print(f"  - Gain/Chorus: {config.gain_chorus.variations} variations")
         if config.add_pause.enabled:
-            print(f"  - Pause manipulation: enabled")
+            print("  - UNSAFE forensic legacy range masking: explicitly enabled")
         if config.merge_audio.enabled:
             print(f"  - Audio merge: merge {config.merge_audio.merge_num} files")
         if config.add_noise.enabled:
@@ -1452,12 +1479,26 @@ def main() -> None:
         f"Successfully processed {processed_count} out of {matched_count} audio/MIDI pairs"
     )
 
-    # Delete the previously generated audio files
-    for _, _, temp_ann_file in tqdm(
+    # Delete generated annotations and any disposable standardized work copies.
+    for source_audio, standardized_audio, temp_ann_file in tqdm(
         audio_files_described, desc="Deleting generated annotations"
     ):
-        # Delete temporary input ann file
         delete_file(temp_ann_file)
+        if os.path.abspath(source_audio) != os.path.abspath(standardized_audio):
+            delete_file(standardized_audio)
+
+    standardized_work_directory = os.path.join(
+        augmented_dir, ".standardized-work"
+    )
+    try:
+        os.rmdir(standardized_work_directory)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning(
+            "Standardized work directory is not empty: %s",
+            standardized_work_directory,
+        )
 
     # After all processing is done, check for matching files
     logger.info("Checking final results...")

@@ -81,9 +81,9 @@ class GainChorusConfig:
 
 @dataclass
 class AddPauseConfig:
-    """Configuration for pause manipulation augmentation."""
+    """Forensic-only configuration for the rejected historical range masker."""
 
-    enabled: bool = True
+    enabled: bool = False
     pause_threshold: float = 0.0033
     min_pause_duration: int = 1
     max_pause_duration: int = 5
@@ -185,7 +185,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
                         if hasattr(config.gain_chorus, key):
                             setattr(config.gain_chorus, key, value)
 
-                # Add pause config
+                # Parse old forensic-reproduction configs, but do not emit this
+                # rejected method from save_default_config.
                 if "add_pause" in yaml_config:
                     for key, value in yaml_config["add_pause"].items():
                         if hasattr(config.add_pause, key):
@@ -239,7 +240,6 @@ def save_default_config(output_path: str) -> None:
         "pitch_shift": {k: v for k, v in vars(config.pitch_shift).items()},
         "reverb_filter": {k: v for k, v in vars(config.reverb_filter).items()},
         "gain_chorus": {k: v for k, v in vars(config.gain_chorus).items()},
-        "add_pause": {k: v for k, v in vars(config.add_pause).items()},
         "merge_audio": {k: v for k, v in vars(config.merge_audio).items()},
         "add_noise": {k: v for k, v in vars(config.add_noise).items()},
         "processing": {k: v for k, v in vars(config.processing).items()},
