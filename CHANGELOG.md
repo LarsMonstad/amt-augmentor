@@ -2,6 +2,31 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [2.0.0a7]
+
+### Added
+- `fractional_detuning_v1`, a deterministic audio-only detuning transform for
+  finite, nonzero shifts below half a semitone, with exact duration/channel
+  preservation and byte-identical MIDI.
+- `archival_noise_v1`, which combines independent seeded 1/f-like recursive
+  noise and seeded-phase harmonic mains hum at an exact aggregate pre-guard
+  RMS SNR. Its two-pass generator has fixed-size working blocks, one
+  full-length output buffer, and no whole-record FFT.
+- Provenance measurements for detuning ratio/backend and archival-noise RNG
+  streams, component orthogonalization, component power, phases, SNR, and the
+  canonical float64 interference hash. The fixed pink-filter coefficients are
+  identified with their 44.1 kHz reference rate and the 1/f-like contract is
+  regression-tested at 8, 16, and 44.1 kHz.
+- Acoustic and failure-path tests covering cents displacement, colored-noise
+  slope, harmonic-hum power, seed replay, stereo handling, invalid parameters,
+  no-overwrite publication, rollback, bounded generator blocks, and a
+  3,249,628-sample (73.688-second at 44.1 kHz) record.
+
+### Changed
+- The research-facing API now includes opt-in detuning and archival-noise
+  transforms. The frozen Galdr conventional O/C adapter remains unchanged and
+  does not include either new view.
+
 ## [2.0.0a6]
 
 ### Added

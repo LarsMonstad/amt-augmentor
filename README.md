@@ -42,6 +42,10 @@ dataset/
 - **Reverb & Filtering**: Room acoustics and frequency filtering effects
 - **Gain & Chorus**: Depth and richness enhancement
 - **Noise Augmentation**: Controlled noise addition for robustness training
+- **Fractional Detuning**: Sub-semitone audio detuning with unchanged symbolic
+  note labels
+- **Archival Noise**: Seeded 1/f-like recursive noise plus harmonic mains hum
+  at a measured aggregate RMS SNR
 - **Legacy Audio Merging**: Disabled by default because sources must be assigned
   to splits before any merge can be shown to be leakage-safe
 
@@ -72,6 +76,19 @@ and provenance-tracked. Similar-sounding results are expected, not a failure;
 the scientific question is whether these controlled transforms improve model
 generalization.
 
+Two opt-in audio-only APIs support successor studies without changing the
+frozen Galdr conventional campaign: `fractional_detuning_v1` shifts audio by
+strictly less than 50 cents and preserves MIDI bytes, while
+`archival_noise_v1` combines independent seeded 1/f-like recursive-noise and
+harmonic-hum streams at an exact pre-quantization aggregate RMS SNR. Its two
+deterministic passes use fixed 65,536-sample working blocks and one full-length
+output buffer rather than a whole-record FFT. The fixed recursive-filter
+coefficients carry a 44.1 kHz reference identity in provenance; the deliberately
+approximate 1/f-like spectrum contract is regression-tested at 8, 16, and
+44.1 kHz. Conservative initial screens should use detuning values `-30`,
+`-15`, `15`, and `30` cents, and archival-noise SNRs `24`, `28`, and `32` dB
+with the default 20% hum-power share, 50 Hz fundamental, and three harmonics.
+
 ```python
 from amt_augmentor import NoiseSNRParameters, noise_snr_v1
 
@@ -82,6 +99,33 @@ noise_snr_v1(
     "tune_augmented_noise.mid",
     seed=42,
     parameters=NoiseSNRParameters(target_snr_db=24.0),
+)
+```
+
+```python
+from amt_augmentor import (
+    ArchivalNoiseParameters,
+    FractionalDetuningParameters,
+    archival_noise_v1,
+    fractional_detuning_v1,
+)
+
+fractional_detuning_v1(
+    "tune.wav",
+    "tune.mid",
+    "tune_detuned.wav",
+    "tune_detuned.mid",
+    seed=42,
+    parameters=FractionalDetuningParameters(cents=30.0),
+)
+
+archival_noise_v1(
+    "tune.wav",
+    "tune.mid",
+    "tune_archival.wav",
+    "tune_archival.mid",
+    seed=42,
+    parameters=ArchivalNoiseParameters(target_snr_db=28.0),
 )
 ```
 
@@ -380,7 +424,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {2.0.0a6},
+  version      = {2.0.0a7},
   year         = {2026},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

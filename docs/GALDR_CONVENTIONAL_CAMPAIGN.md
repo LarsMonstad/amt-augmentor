@@ -16,6 +16,12 @@ it reproduces the accepted earlier C seed/parameter projection. Byte identity
 also depends on identical source bytes, normalized MIDI, package versions, and
 runtime, so it must be established by output hashes rather than assumed.
 
+This adapter is frozen at the five listed conventional transform families.
+The separately exported `fractional_detuning_v1` and `archival_noise_v1` APIs
+are intentionally absent from its view slots, parameter stream, and condition
+identity; adding them requires a new campaign identity rather than editing or
+replaying this one.
+
 ## Commands for the current clean dataset
 
 Use canonical paths. The adapter intentionally refuses paths containing a

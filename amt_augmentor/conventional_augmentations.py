@@ -19,15 +19,20 @@ All public functions:
 ``time_stretch_v1`` maps all MIDI times by the *realized* integer-sample
 duration ratio, rather than rounding annotation text or assuming that the
 nominal playback rate can be represented exactly in samples.
+
+The opt-in ``fractional_detuning_v1`` and ``archival_noise_v1`` APIs are
+audio-only successor transforms. They intentionally are not wired into the
+frozen Galdr conventional campaign adapter.
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 import librosa
 import numpy as np
@@ -40,6 +45,7 @@ from pedalboard import (
     Pedalboard,
     Reverb,
 )
+from scipy.signal import lfilter
 
 from amt_augmentor._paired_io import (
     _attach_plan_config,
@@ -54,6 +60,22 @@ from amt_augmentor._paired_io import (
 PEAK_LIMIT = 0.999
 MODEL_MINIMUM_MIDI_PITCH = 21
 MODEL_MAXIMUM_MIDI_PITCH = 108
+MAXIMUM_HUM_HARMONICS = 16
+ARCHIVAL_NOISE_BLOCK_SAMPLES = 65536
+PINK_FILTER_WARMUP_SAMPLES = 16384
+PINK_FILTER_POLES = (0.99886, 0.99332, 0.96900, 0.86650, 0.55000, -0.7616)
+PINK_FILTER_GAINS = (
+    0.0555179,
+    0.0750759,
+    0.1538520,
+    0.3104856,
+    0.5329522,
+    -0.0168980,
+)
+PINK_DIRECT_GAIN = 0.5362
+PINK_DELAYED_WHITE_GAIN = 0.115926
+PINK_FILTER_REFERENCE_SAMPLE_RATE_HZ = 44100
+PINK_SPECTRUM_VALIDATION_SAMPLE_RATES_HZ = (8000, 16000, 44100)
 
 
 @dataclass(frozen=True)
@@ -69,10 +91,27 @@ class GainChorusParameters:
 
 
 @dataclass(frozen=True)
+class FractionalDetuningParameters:
+    """A finite, nonzero detuning strictly between -50 and 50 cents."""
+
+    cents: float
+
+
+@dataclass(frozen=True)
 class NoiseSNRParameters:
     """Parameters for :func:`noise_snr_v1`."""
 
     target_snr_db: float
+
+
+@dataclass(frozen=True)
+class ArchivalNoiseParameters:
+    """Target SNR and finite-record pink-noise/harmonic-hum power mix."""
+
+    target_snr_db: float
+    hum_power_fraction: float = 0.20
+    mains_frequency_hz: float = 50.0
+    harmonic_count: int = 3
 
 
 @dataclass(frozen=True)
@@ -143,6 +182,47 @@ def _validate_gain_chorus(parameters: GainChorusParameters) -> None:
 
 def _validate_noise(parameters: NoiseSNRParameters) -> None:
     _require_range(parameters.target_snr_db, "target_snr_db", -20.0, 100.0)
+
+
+def _validate_fractional_detuning(
+    parameters: FractionalDetuningParameters,
+) -> None:
+    cents = _require_builtin_number(parameters.cents, "cents")
+    if cents == 0.0 or abs(cents) >= 50.0:
+        raise ValueError("cents must satisfy 0 < abs(cents) < 50")
+
+
+def _validate_archival_noise(
+    parameters: ArchivalNoiseParameters,
+    *,
+    sample_rate: Optional[int] = None,
+) -> None:
+    _require_range(parameters.target_snr_db, "target_snr_db", -20.0, 100.0)
+    hum_power_fraction = _require_builtin_number(
+        parameters.hum_power_fraction,
+        "hum_power_fraction",
+    )
+    if not 0.0 < hum_power_fraction < 1.0:
+        raise ValueError("hum_power_fraction must be strictly between 0 and 1")
+    mains_frequency_hz = _require_builtin_number(
+        parameters.mains_frequency_hz,
+        "mains_frequency_hz",
+    )
+    if mains_frequency_hz <= 0.0:
+        raise ValueError("mains_frequency_hz must be positive")
+    if type(parameters.harmonic_count) is not int:
+        raise TypeError("harmonic_count must be a built-in int")
+    if not 1 <= parameters.harmonic_count <= MAXIMUM_HUM_HARMONICS:
+        raise ValueError(
+            f"harmonic_count must be in [1, {MAXIMUM_HUM_HARMONICS}]"
+        )
+    if sample_rate is not None:
+        highest_harmonic_hz = mains_frequency_hz * parameters.harmonic_count
+        if highest_harmonic_hz >= sample_rate / 2.0:
+            raise ValueError(
+                "highest mains harmonic must be strictly below the audio Nyquist "
+                "frequency"
+            )
 
 
 def _validate_reverb(parameters: ReverbFiltersParameters, sample_rate: int) -> None:
@@ -278,6 +358,363 @@ def _peak_guard(audio: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
         "peak_limit": PEAK_LIMIT,
         "peak_guard_linear_gain": applied_gain,
         "peak_after_guard": peak_after,
+    }
+
+
+def _peak_guard_in_place(audio: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
+    """Apply the explicit peak guard without another full-length allocation."""
+
+    peak_before = 0.0
+    for start in range(0, audio.shape[0], ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        block = audio[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES]
+        if not np.isfinite(block).all():
+            raise RuntimeError("rendered audio contains NaN or infinite samples")
+        peak_before = max(
+            peak_before,
+            float(np.max(np.abs(block), initial=0.0)),
+        )
+    if peak_before == 0.0:
+        raise RuntimeError("rendered audio is completely silent")
+    applied_gain = min(1.0, PEAK_LIMIT / peak_before)
+    np.multiply(audio, applied_gain, out=audio)
+    peak_after = 0.0
+    for start in range(0, audio.shape[0], ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        block = audio[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES]
+        peak_after = max(
+            peak_after,
+            float(np.max(np.abs(block), initial=0.0)),
+        )
+    return audio, {
+        "peak_before_guard": peak_before,
+        "peak_limit": PEAK_LIMIT,
+        "peak_guard_linear_gain": applied_gain,
+        "peak_after_guard": peak_after,
+    }
+
+
+def _array_rms(audio: np.ndarray, label: str) -> float:
+    square_sum = 0.0
+    for start in range(0, audio.shape[0], ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        block = audio[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES]
+        square_sum += float(np.sum(np.square(block), dtype=np.float64))
+    value = math.sqrt(square_sum / audio.size)
+    if not math.isfinite(value) or value <= 0.0:
+        raise RuntimeError(f"{label} RMS must be finite and positive")
+    return value
+
+
+def _float64_array_sha256(audio: np.ndarray) -> str:
+    digest = hashlib.sha256()
+    for start in range(0, audio.shape[0], ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        canonical = np.ascontiguousarray(
+            audio[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES],
+            dtype=np.dtype("<f8"),
+        )
+        digest.update(canonical.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _pink_noise_blocks(
+    sample_count: int,
+    channel_count: int,
+    seed_sequence: np.random.SeedSequence,
+) -> Iterator[Tuple[int, np.ndarray]]:
+    """Yield deterministic pink-noise blocks with constant-size DSP state."""
+
+    generator = np.random.default_rng(seed_sequence)
+    filter_states = np.zeros(
+        (channel_count, len(PINK_FILTER_POLES)),
+        dtype=np.float64,
+    )
+    previous_white = np.zeros(channel_count, dtype=np.float64)
+
+    def render(white: np.ndarray) -> np.ndarray:
+        nonlocal previous_white
+        pink = white * PINK_DIRECT_GAIN
+        for channel in range(channel_count):
+            for filter_index, (pole, gain) in enumerate(
+                zip(PINK_FILTER_POLES, PINK_FILTER_GAINS)
+            ):
+                filtered, final_state = lfilter(
+                    (gain,),
+                    (1.0, -pole),
+                    white[:, channel],
+                    zi=(filter_states[channel, filter_index],),
+                )
+                filter_states[channel, filter_index] = final_state[0]
+                pink[:, channel] += filtered
+        pink[0, :] += PINK_DELAYED_WHITE_GAIN * previous_white
+        if white.shape[0] > 1:
+            pink[1:, :] += PINK_DELAYED_WHITE_GAIN * white[:-1, :]
+        previous_white = white[-1, :].copy()
+        return pink
+
+    remaining_warmup = PINK_FILTER_WARMUP_SAMPLES
+    while remaining_warmup > 0:
+        block_samples = min(remaining_warmup, ARCHIVAL_NOISE_BLOCK_SAMPLES)
+        render(
+            generator.standard_normal(
+                (block_samples, channel_count),
+                dtype=np.float64,
+            )
+        )
+        remaining_warmup -= block_samples
+
+    for start in range(0, sample_count, ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        block_samples = min(
+            ARCHIVAL_NOISE_BLOCK_SAMPLES,
+            sample_count - start,
+        )
+        white = generator.standard_normal(
+            (block_samples, channel_count),
+            dtype=np.float64,
+        )
+        yield start, render(white)
+
+
+def _harmonic_hum_block(
+    start: int,
+    block_samples: int,
+    channel_count: int,
+    sample_rate: int,
+    mains_frequency_hz: float,
+    phases: np.ndarray,
+    relative_amplitudes: np.ndarray,
+) -> np.ndarray:
+    """Render one bounded block of seeded-phase harmonic mains hum."""
+
+    time = (start + np.arange(block_samples, dtype=np.float64)) / sample_rate
+    hum = np.zeros((block_samples, channel_count), dtype=np.float64)
+    for harmonic_index, relative_amplitude in enumerate(
+        relative_amplitudes,
+        start=1,
+    ):
+        angular_frequency = 2.0 * np.pi * mains_frequency_hz * harmonic_index
+        hum += relative_amplitude * np.sin(
+            angular_frequency * time[:, np.newaxis]
+            + phases[:, harmonic_index - 1][np.newaxis, :]
+        )
+    return hum
+
+
+def _raw_component_statistics(
+    shape: Tuple[int, int],
+    sample_rate: int,
+    pink_seed: np.random.SeedSequence,
+    mains_frequency_hz: float,
+    phases: np.ndarray,
+    relative_amplitudes: np.ndarray,
+) -> Dict[str, Any]:
+    """Measure finite-record moments without retaining either component."""
+
+    sample_count, channel_count = shape
+    pink_sum = np.zeros(channel_count, dtype=np.float64)
+    hum_sum = np.zeros(channel_count, dtype=np.float64)
+    pink_square_sum = 0.0
+    hum_square_sum = 0.0
+    cross_sum = 0.0
+    for start, pink in _pink_noise_blocks(
+        sample_count,
+        channel_count,
+        pink_seed,
+    ):
+        hum = _harmonic_hum_block(
+            start,
+            pink.shape[0],
+            channel_count,
+            sample_rate,
+            mains_frequency_hz,
+            phases,
+            relative_amplitudes,
+        )
+        pink_sum += np.sum(pink, axis=0, dtype=np.float64)
+        hum_sum += np.sum(hum, axis=0, dtype=np.float64)
+        pink_square_sum += float(np.sum(np.square(pink), dtype=np.float64))
+        hum_square_sum += float(np.sum(np.square(hum), dtype=np.float64))
+        cross_sum += float(np.sum(pink * hum, dtype=np.float64))
+
+    pink_mean = pink_sum / sample_count
+    hum_mean = hum_sum / sample_count
+    value_count = sample_count * channel_count
+    pink_power = (
+        pink_square_sum - sample_count * float(np.dot(pink_mean, pink_mean))
+    ) / value_count
+    hum_power = (
+        hum_square_sum - sample_count * float(np.dot(hum_mean, hum_mean))
+    ) / value_count
+    centered_cross_power = (
+        cross_sum - sample_count * float(np.dot(pink_mean, hum_mean))
+    ) / value_count
+    if (
+        not math.isfinite(pink_power)
+        or not math.isfinite(hum_power)
+        or pink_power <= 0.0
+        or hum_power <= 0.0
+    ):
+        raise RuntimeError("archival-noise component power is not finite and positive")
+    pink_rms = math.sqrt(pink_power)
+    hum_rms = math.sqrt(hum_power)
+    unit_cross_power = centered_cross_power / (pink_rms * hum_rms)
+    orthogonalized_pink_power = 1.0 - unit_cross_power**2
+    if (
+        not math.isfinite(orthogonalized_pink_power)
+        or orthogonalized_pink_power <= 0.0
+    ):
+        raise RuntimeError("pink noise is degenerate after hum orthogonalization")
+    return {
+        "pink_mean_by_channel": pink_mean,
+        "hum_mean_by_channel": hum_mean,
+        "pink_rms_before_normalization": pink_rms,
+        "hum_rms_before_normalization": hum_rms,
+        "hum_projection_removed_from_pink": unit_cross_power,
+        "orthogonalized_pink_rms_before_normalization": math.sqrt(
+            orthogonalized_pink_power
+        ),
+    }
+
+
+def _archival_interference(
+    shape: Tuple[int, int],
+    sample_rate: int,
+    seed: int,
+    parameters: ArchivalNoiseParameters,
+    target_interference_rms: float,
+) -> Tuple[np.ndarray, Dict[str, Any]]:
+    """Build exact-SNR interference with bounded temporary working memory."""
+
+    sample_count, channel_count = shape
+    seed_sequence = np.random.SeedSequence(seed)
+    pink_seed, hum_seed = seed_sequence.spawn(2)
+    phases = np.random.default_rng(hum_seed).uniform(
+        0.0,
+        2.0 * np.pi,
+        size=(channel_count, parameters.harmonic_count),
+    )
+    relative_amplitudes = 1.0 / np.arange(
+        1,
+        parameters.harmonic_count + 1,
+        dtype=np.float64,
+    )
+    statistics = _raw_component_statistics(
+        shape,
+        sample_rate,
+        pink_seed,
+        float(parameters.mains_frequency_hz),
+        phases,
+        relative_amplitudes,
+    )
+    hum_fraction = float(parameters.hum_power_fraction)
+    pink_weight = math.sqrt(1.0 - hum_fraction)
+    hum_weight = math.sqrt(hum_fraction)
+    interference = np.empty(shape, dtype=np.float64)
+    pink_unit_square_sum = 0.0
+    hum_unit_square_sum = 0.0
+    unit_cross_sum = 0.0
+    combined_square_sum = 0.0
+    for start, pink in _pink_noise_blocks(
+        sample_count,
+        channel_count,
+        pink_seed,
+    ):
+        hum = _harmonic_hum_block(
+            start,
+            pink.shape[0],
+            channel_count,
+            sample_rate,
+            float(parameters.mains_frequency_hz),
+            phases,
+            relative_amplitudes,
+        )
+        pink -= statistics["pink_mean_by_channel"][np.newaxis, :]
+        pink /= statistics["pink_rms_before_normalization"]
+        hum -= statistics["hum_mean_by_channel"][np.newaxis, :]
+        hum /= statistics["hum_rms_before_normalization"]
+        pink -= statistics["hum_projection_removed_from_pink"] * hum
+        pink /= statistics["orthogonalized_pink_rms_before_normalization"]
+
+        pink_unit_square_sum += float(np.sum(np.square(pink), dtype=np.float64))
+        hum_unit_square_sum += float(np.sum(np.square(hum), dtype=np.float64))
+        unit_cross_sum += float(np.sum(pink * hum, dtype=np.float64))
+        output_block = interference[start : start + pink.shape[0]]
+        np.multiply(pink, pink_weight, out=output_block)
+        output_block += hum_weight * hum
+        combined_square_sum += float(
+            np.sum(np.square(output_block), dtype=np.float64)
+        )
+
+    value_count = sample_count * channel_count
+    pink_unit_power = pink_unit_square_sum / value_count
+    hum_unit_power = hum_unit_square_sum / value_count
+    unit_cross_power = unit_cross_sum / value_count
+    combined_rms_before_scaling = math.sqrt(
+        combined_square_sum / value_count
+    )
+    final_scale = target_interference_rms / combined_rms_before_scaling
+    np.multiply(interference, final_scale, out=interference)
+    interference_rms = _array_rms(interference, "scaled archival interference")
+    pink_rms = abs(final_scale * pink_weight) * math.sqrt(pink_unit_power)
+    hum_rms = abs(final_scale * hum_weight) * math.sqrt(hum_unit_power)
+    component_cross_power = (
+        final_scale**2 * pink_weight * hum_weight * unit_cross_power
+    )
+    component_cross_correlation = component_cross_power / (pink_rms * hum_rms)
+    component_power_sum = pink_rms**2 + hum_rms**2
+
+    return interference, {
+        "rng_algorithm": (
+            "numpy SeedSequence.spawn with independent default_rng streams"
+        ),
+        "pink_stream_spawn_key": list(pink_seed.spawn_key),
+        "hum_stream_spawn_key": list(hum_seed.spawn_key),
+        "pink_noise_algorithm": (
+            "six-state recursive filter plus direct and delayed white terms v1"
+        ),
+        "pink_spectrum_contract": "deterministic 1/f-like power approximation",
+        "pink_filter_poles": list(PINK_FILTER_POLES),
+        "pink_filter_gains": list(PINK_FILTER_GAINS),
+        "pink_direct_gain": PINK_DIRECT_GAIN,
+        "pink_delayed_white_gain": PINK_DELAYED_WHITE_GAIN,
+        "pink_filter_reference_sample_rate_hz": (
+            PINK_FILTER_REFERENCE_SAMPLE_RATE_HZ
+        ),
+        "pink_spectrum_validation_sample_rates_hz": list(
+            PINK_SPECTRUM_VALIDATION_SAMPLE_RATES_HZ
+        ),
+        "pink_filter_warmup_samples": PINK_FILTER_WARMUP_SAMPLES,
+        "pink_centered_per_channel": True,
+        "pink_generation_passes": 2,
+        "whole_record_fft_used": False,
+        "working_block_samples": ARCHIVAL_NOISE_BLOCK_SAMPLES,
+        "temporary_memory_model": (
+            "O(working_block_samples * channels); one full-size output buffer"
+        ),
+        "channel_generation": "independent pink stream and harmonic phases per channel",
+        "hum_harmonic_relative_amplitudes": relative_amplitudes.tolist(),
+        "hum_phases_radians_by_channel": phases.tolist(),
+        "pink_mean_by_channel_before_centering": statistics[
+            "pink_mean_by_channel"
+        ].tolist(),
+        "hum_mean_by_channel_before_centering": statistics[
+            "hum_mean_by_channel"
+        ].tolist(),
+        "pink_rms_before_normalization": statistics[
+            "pink_rms_before_normalization"
+        ],
+        "hum_rms_before_normalization": statistics[
+            "hum_rms_before_normalization"
+        ],
+        "hum_projection_removed_from_pink": statistics[
+            "hum_projection_removed_from_pink"
+        ],
+        "unit_component_cross_power_after_orthogonalization": unit_cross_power,
+        "combined_unit_rms_before_final_scaling": combined_rms_before_scaling,
+        "pink_component_rms": pink_rms,
+        "hum_component_rms": hum_rms,
+        "component_cross_power": component_cross_power,
+        "component_cross_correlation": component_cross_correlation,
+        "measured_hum_power_fraction": hum_rms**2 / component_power_sum,
+        "interference_rms": interference_rms,
+        "interference_float64_sha256": _float64_array_sha256(interference),
     }
 
 
@@ -453,6 +890,89 @@ def gain_chorus_v1(
     )
 
 
+def fractional_detuning_v1(
+    audio_path: os.PathLike,
+    midi_path: os.PathLike,
+    output_audio_path: os.PathLike,
+    output_midi_path: os.PathLike,
+    *,
+    seed: int,
+    parameters: FractionalDetuningParameters,
+    provenance_path: Optional[os.PathLike] = None,
+) -> Dict[str, Any]:
+    """Detune audio by less than half a semitone without changing MIDI labels."""
+
+    _validate_seed(seed)
+    _validate_fractional_detuning(parameters)
+    (
+        source_audio,
+        source_midi,
+        target_audio,
+        target_midi,
+        target_provenance,
+    ) = _output_paths(
+        audio_path,
+        midi_path,
+        output_audio_path,
+        output_midi_path,
+        provenance_path,
+    )
+    audio, sample_rate, audio_info, midi = _load_pair(source_audio, source_midi)
+    _validate_loaded_pair(audio, sample_rate, midi)
+    cents = float(parameters.cents)
+    semitones = cents / 100.0
+    channel_first = np.ascontiguousarray(audio.T, dtype=np.float64)
+    rendered = np.asarray(
+        librosa.effects.pitch_shift(
+            channel_first,
+            sr=sample_rate,
+            n_steps=semitones,
+            bins_per_octave=12,
+            res_type="soxr_hq",
+            scale=False,
+        ),
+        dtype=np.float64,
+    ).T
+    if rendered.shape != audio.shape:
+        raise RuntimeError(
+            "fractional detuning changed audio shape: "
+            f"{audio.shape} -> {rendered.shape}"
+        )
+    rendered, peak_qc = _peak_guard(rendered)
+    qc = {
+        **peak_qc,
+        "requested_cents": cents,
+        "requested_semitones": semitones,
+        "requested_frequency_ratio": 2.0 ** (cents / 1200.0),
+        "pitch_shift_backend": "librosa.effects.pitch_shift",
+        "bins_per_octave": 12,
+        "resample_type": "soxr_hq",
+        "energy_scaling_requested": False,
+        "randomness_used": False,
+        "source_audio_samples": int(audio.shape[0]),
+        "output_audio_samples": int(rendered.shape[0]),
+        "source_audio_channels": int(audio.shape[1]),
+        "output_audio_channels": int(rendered.shape[1]),
+        "symbolic_pitch_policy": "MIDI bytes retained because abs(cents) < 50",
+    }
+    return _publish_audio_only(
+        transform="fractional_detuning_v1",
+        seed=seed,
+        parameters=asdict(parameters),
+        source_audio=source_audio,
+        source_midi=source_midi,
+        target_audio=target_audio,
+        target_midi=target_midi,
+        target_provenance=target_provenance,
+        output_audio=rendered,
+        audio=audio,
+        sample_rate=sample_rate,
+        audio_info=audio_info,
+        midi=midi,
+        qc=qc,
+    )
+
+
 def noise_snr_v1(
     audio_path: os.PathLike,
     midi_path: os.PathLike,
@@ -503,6 +1023,92 @@ def noise_snr_v1(
     }
     return _publish_audio_only(
         transform="noise_snr_v1",
+        seed=seed,
+        parameters=asdict(parameters),
+        source_audio=source_audio,
+        source_midi=source_midi,
+        target_audio=target_audio,
+        target_midi=target_midi,
+        target_provenance=target_provenance,
+        output_audio=rendered,
+        audio=audio,
+        sample_rate=sample_rate,
+        audio_info=audio_info,
+        midi=midi,
+        qc=qc,
+    )
+
+
+def archival_noise_v1(
+    audio_path: os.PathLike,
+    midi_path: os.PathLike,
+    output_audio_path: os.PathLike,
+    output_midi_path: os.PathLike,
+    *,
+    seed: int,
+    parameters: ArchivalNoiseParameters,
+    provenance_path: Optional[os.PathLike] = None,
+) -> Dict[str, Any]:
+    """Add deterministic 1/f-like noise and seeded-phase hum at target SNR."""
+
+    _validate_seed(seed)
+    _validate_archival_noise(parameters)
+    (
+        source_audio,
+        source_midi,
+        target_audio,
+        target_midi,
+        target_provenance,
+    ) = _output_paths(
+        audio_path,
+        midi_path,
+        output_audio_path,
+        output_midi_path,
+        provenance_path,
+    )
+    audio, sample_rate, audio_info, midi = _load_pair(source_audio, source_midi)
+    _validate_archival_noise(parameters, sample_rate=sample_rate)
+    _validate_loaded_pair(audio, sample_rate, midi)
+    if audio.shape[0] < 2:
+        raise ValueError("archival noise requires at least two audio samples")
+    signal_rms = _array_rms(audio, "input audio")
+    target_interference_rms = signal_rms / (
+        10.0 ** (float(parameters.target_snr_db) / 20.0)
+    )
+    if not math.isfinite(target_interference_rms) or target_interference_rms <= 0.0:
+        raise ValueError("target archival-interference RMS must be finite and positive")
+    interference, interference_qc = _archival_interference(
+        audio.shape,
+        sample_rate,
+        seed,
+        parameters,
+        target_interference_rms,
+    )
+    measured_interference_rms = float(interference_qc["interference_rms"])
+    measured_snr = 20.0 * math.log10(signal_rms / measured_interference_rms)
+    interference += audio
+    rendered, peak_qc = _peak_guard_in_place(interference)
+    qc = {
+        **peak_qc,
+        **interference_qc,
+        "signal_rms": signal_rms,
+        "signal_rms_scope": "all samples and channels equally weighted",
+        "target_interference_rms": target_interference_rms,
+        "target_snr_db": float(parameters.target_snr_db),
+        "measured_float_snr_db": measured_snr,
+        "snr_absolute_error_db": abs(
+            measured_snr - float(parameters.target_snr_db)
+        ),
+        "snr_measurement_stage": (
+            "before peak guard and PCM quantization, after component "
+            "orthogonalization and aggregate-RMS scaling"
+        ),
+        "component_power_scope": "all samples and channels equally weighted",
+        "hard_clipping_used": False,
+        "opaque_peak_normalization_used": False,
+    }
+    return _publish_audio_only(
+        transform="archival_noise_v1",
         seed=seed,
         parameters=asdict(parameters),
         source_audio=source_audio,
@@ -787,11 +1393,15 @@ def time_stretch_v1(
 
 
 __all__ = [
+    "ArchivalNoiseParameters",
+    "FractionalDetuningParameters",
     "GainChorusParameters",
     "NoiseSNRParameters",
     "PitchShiftParameters",
     "ReverbFiltersParameters",
     "TimeStretchParameters",
+    "archival_noise_v1",
+    "fractional_detuning_v1",
     "gain_chorus_v1",
     "noise_snr_v1",
     "pitch_shift_v1",

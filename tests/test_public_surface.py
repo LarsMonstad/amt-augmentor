@@ -5,10 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import amt_augmentor
-
 from amt_augmentor.config import Config, save_default_config
 from amt_augmentor.main import main
-
 
 REJECTED_PUBLIC_NAMES = {
     "DropNoteIsolatedPolicy",
@@ -21,7 +19,13 @@ REJECTED_PUBLIC_NAMES = {
 
 
 def test_package_exports_only_supported_transform_families():
-    assert amt_augmentor.__version__ == "2.0.0a6"
+    assert amt_augmentor.__version__ == "2.0.0a7"
+    assert {
+        "ArchivalNoiseParameters",
+        "FractionalDetuningParameters",
+        "archival_noise_v1",
+        "fractional_detuning_v1",
+    } <= set(amt_augmentor.__all__)
     assert REJECTED_PUBLIC_NAMES.isdisjoint(amt_augmentor.__all__)
     for name in REJECTED_PUBLIC_NAMES:
         assert not hasattr(amt_augmentor, name)
