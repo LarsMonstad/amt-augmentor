@@ -2,6 +2,23 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
+## [2.0.0a8]
+
+### Added
+- `reverb_only_v1`, with explicit mild and aggressive FreeVerb preset grids,
+  so reverb can be evaluated independently of high-pass and low-pass filters.
+- `materialize_pitch_shift_grid_v1`, which renders a requested integral-shift
+  grid atomically, keeps every MIDI label synchronized, and verifies each
+  direction with non-wrapping absolute-frequency acoustic QC.
+- `local_time_warp_v1`, a deterministic, exact-duration local tempo variation
+  that applies one continuous phase-vocoder render and the same monotonic
+  sample map to every MIDI boundary without cutting, looping, or splicing.
+
+### Changed
+- The new methods are opt-in research APIs. The frozen Galdr conventional
+  campaign remains unchanged, allowing matched successor studies against the
+  previously materialized controls.
+
 ## [2.0.0a7]
 
 ### Added

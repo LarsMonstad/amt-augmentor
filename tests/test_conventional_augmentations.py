@@ -11,15 +11,19 @@ import soundfile as sf
 
 import amt_augmentor._paired_io as paired_io
 from amt_augmentor.conventional_augmentations import (
+    AGGRESSIVE_REVERB_ONLY_PRESETS_V1,
+    MILD_REVERB_ONLY_PRESETS_V1,
     GainChorusParameters,
     NoiseSNRParameters,
     PitchShiftParameters,
     ReverbFiltersParameters,
+    ReverbOnlyParameters,
     TimeStretchParameters,
     gain_chorus_v1,
     noise_snr_v1,
     pitch_shift_v1,
     reverb_filters_v1,
+    reverb_only_v1,
     time_stretch_v1,
 )
 
@@ -97,6 +101,15 @@ def _notes(path: Path):
             ),
             "reverb_filters_v1",
         ),
+        (
+            reverb_only_v1,
+            ReverbOnlyParameters(
+                room_size=0.25,
+                wet_level=0.15,
+                dry_level=0.85,
+            ),
+            "reverb_only_v1",
+        ),
     ],
 )
 def test_audio_only_transforms_preserve_midi_bytes_and_shape(
@@ -150,6 +163,46 @@ def test_noise_has_seeded_measured_snr_without_opaque_normalization(tmp_path):
     )
     assert provenances[0]["qc"]["opaque_peak_normalization_used"] is False
     assert provenances[0]["plan_config_sha256"] == provenances[1]["plan_config_sha256"]
+
+
+def test_reverb_only_presets_are_explicit_ordered_and_filter_free(tmp_path):
+    assert len(MILD_REVERB_ONLY_PRESETS_V1) == 4
+    assert len(AGGRESSIVE_REVERB_ONLY_PRESETS_V1) == 4
+    assert max(item.room_size for item in MILD_REVERB_ONLY_PRESETS_V1) < min(
+        item.room_size for item in AGGRESSIVE_REVERB_ONLY_PRESETS_V1
+    )
+    assert max(item.wet_level for item in MILD_REVERB_ONLY_PRESETS_V1) < min(
+        item.wet_level for item in AGGRESSIVE_REVERB_ONLY_PRESETS_V1
+    )
+    for item in MILD_REVERB_ONLY_PRESETS_V1 + AGGRESSIVE_REVERB_ONLY_PRESETS_V1:
+        assert item.wet_level + item.dry_level == pytest.approx(1.0)
+        assert item.damping == 0.5
+        assert item.width == 1.0
+        assert item.freeze_mode == 0.0
+
+    source_audio, source_midi = _write_pair(tmp_path)
+    mild_provenance = reverb_only_v1(
+        source_audio,
+        source_midi,
+        tmp_path / "reverb-mild.wav",
+        tmp_path / "reverb-mild.mid",
+        seed=99,
+        parameters=MILD_REVERB_ONLY_PRESETS_V1[0],
+    )
+    provenance = reverb_only_v1(
+        source_audio,
+        source_midi,
+        tmp_path / "reverb-aggressive.wav",
+        tmp_path / "reverb-aggressive.mid",
+        seed=99,
+        parameters=AGGRESSIVE_REVERB_ONLY_PRESETS_V1[-1],
+    )
+    assert provenance["qc"]["effect_chain"] == ["pedalboard.Reverb"]
+    assert provenance["qc"]["highpass_filter_applied"] is False
+    assert provenance["qc"]["lowpass_filter_applied"] is False
+    assert provenance["qc"]["all_reverb_parameters_explicit"] is True
+    assert provenance["qc"]["residual_to_source_rms_ratio"] > 0.0
+    assert mild_provenance["qc"]["residual_to_source_rms_ratio"] > 0.0
 
 
 def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
@@ -229,6 +282,14 @@ def test_time_stretch_uses_realized_sample_ratio_for_every_note_boundary(tmp_pat
                 dry_level=0.8,
                 highpass_hz=4000.0,
                 lowpass_hz=2000.0,
+            ),
+        ),
+        (
+            reverb_only_v1,
+            ReverbOnlyParameters(
+                room_size=0.2,
+                wet_level=0.0,
+                dry_level=1.0,
             ),
         ),
     ],

@@ -89,6 +89,12 @@ approximate 1/f-like spectrum contract is regression-tested at 8, 16, and
 `-15`, `15`, and `30` cents, and archival-noise SNRs `24`, `28`, and `32` dB
 with the default 20% hum-power share, 50 Hz fundamental, and three harmonics.
 
+Further opt-in successor APIs separate reverb from filtering, materialize and
+verify complete integral pitch-shift grids, and create subtle local tempo
+variation. `local_time_warp_v1` preserves the recording duration and renders
+the complete recording once using a continuous monotonic time map; the same
+map is applied to MIDI event boundaries, with no chunk repetition or splicing.
+
 ```python
 from amt_augmentor import NoiseSNRParameters, noise_snr_v1
 
@@ -424,7 +430,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {2.0.0a7},
+  version      = {2.0.0a8},
   year         = {2026},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

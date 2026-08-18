@@ -19,12 +19,18 @@ REJECTED_PUBLIC_NAMES = {
 
 
 def test_package_exports_only_supported_transform_families():
-    assert amt_augmentor.__version__ == "2.0.0a7"
+    assert amt_augmentor.__version__ == "2.0.0a8"
     assert {
+        "AGGRESSIVE_REVERB_ONLY_PRESETS_V1",
         "ArchivalNoiseParameters",
         "FractionalDetuningParameters",
+        "LocalTimeWarpParameters",
+        "ReverbOnlyParameters",
         "archival_noise_v1",
         "fractional_detuning_v1",
+        "local_time_warp_v1",
+        "materialize_pitch_shift_grid_v1",
+        "reverb_only_v1",
     } <= set(amt_augmentor.__all__)
     assert REJECTED_PUBLIC_NAMES.isdisjoint(amt_augmentor.__all__)
     for name in REJECTED_PUBLIC_NAMES:

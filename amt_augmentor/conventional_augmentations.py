@@ -20,9 +20,9 @@ All public functions:
 duration ratio, rather than rounding annotation text or assuming that the
 nominal playback rate can be represented exactly in samples.
 
-The opt-in ``fractional_detuning_v1`` and ``archival_noise_v1`` APIs are
-audio-only successor transforms. They intentionally are not wired into the
-frozen Galdr conventional campaign adapter.
+The opt-in ``fractional_detuning_v1``, ``archival_noise_v1``, and
+``reverb_only_v1`` APIs are audio-only successor transforms. They intentionally
+are not wired into the frozen Galdr conventional campaign adapter.
 """
 
 from __future__ import annotations
@@ -123,6 +123,35 @@ class ReverbFiltersParameters:
     dry_level: float
     highpass_hz: float
     lowpass_hz: float
+
+
+@dataclass(frozen=True)
+class ReverbOnlyParameters:
+    """Fully specified FreeVerb parameters for :func:`reverb_only_v1`."""
+
+    room_size: float
+    wet_level: float
+    dry_level: float
+    damping: float = 0.5
+    width: float = 1.0
+    freeze_mode: float = 0.0
+
+
+# Each preset keeps wet_level + dry_level equal to one.  These are research
+# grids, not defaults applied implicitly by reverb_only_v1.
+MILD_REVERB_ONLY_PRESETS_V1 = (
+    ReverbOnlyParameters(room_size=0.15, wet_level=0.10, dry_level=0.90),
+    ReverbOnlyParameters(room_size=0.25, wet_level=0.15, dry_level=0.85),
+    ReverbOnlyParameters(room_size=0.35, wet_level=0.20, dry_level=0.80),
+    ReverbOnlyParameters(room_size=0.45, wet_level=0.25, dry_level=0.75),
+)
+
+AGGRESSIVE_REVERB_ONLY_PRESETS_V1 = (
+    ReverbOnlyParameters(room_size=0.55, wet_level=0.30, dry_level=0.70),
+    ReverbOnlyParameters(room_size=0.65, wet_level=0.35, dry_level=0.65),
+    ReverbOnlyParameters(room_size=0.75, wet_level=0.40, dry_level=0.60),
+    ReverbOnlyParameters(room_size=0.85, wet_level=0.45, dry_level=0.55),
+)
 
 
 @dataclass(frozen=True)
@@ -243,6 +272,17 @@ def _validate_reverb(parameters: ReverbFiltersParameters, sample_rate: int) -> N
     )
     if highpass >= lowpass:
         raise ValueError("highpass_hz must be lower than lowpass_hz")
+
+
+def _validate_reverb_only(parameters: ReverbOnlyParameters) -> None:
+    _require_range(parameters.room_size, "room_size", 0.0, 1.0)
+    _require_range(parameters.wet_level, "wet_level", 0.0, 1.0)
+    _require_range(parameters.dry_level, "dry_level", 0.0, 1.0)
+    _require_range(parameters.damping, "damping", 0.0, 1.0)
+    _require_range(parameters.width, "width", 0.0, 1.0)
+    _require_range(parameters.freeze_mode, "freeze_mode", 0.0, 1.0)
+    if parameters.wet_level == 0.0:
+        raise ValueError("wet_level must be greater than zero for reverb_only_v1")
 
 
 def _validate_pitch(parameters: PitchShiftParameters) -> None:
@@ -401,6 +441,50 @@ def _array_rms(audio: np.ndarray, label: str) -> float:
     if not math.isfinite(value) or value <= 0.0:
         raise RuntimeError(f"{label} RMS must be finite and positive")
     return value
+
+
+def _paired_audio_change_qc(source: np.ndarray, output: np.ndarray) -> Dict[str, float]:
+    """Measure an audio-only effect without another full-recording buffer."""
+
+    if source.shape != output.shape:
+        raise RuntimeError("audio-change QC requires arrays with equal shape")
+    source_square_sum = 0.0
+    output_square_sum = 0.0
+    residual_square_sum = 0.0
+    dot_sum = 0.0
+    for start in range(0, source.shape[0], ARCHIVAL_NOISE_BLOCK_SAMPLES):
+        source_block = source[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES]
+        output_block = output[start : start + ARCHIVAL_NOISE_BLOCK_SAMPLES]
+        source_square_sum += float(
+            np.sum(np.square(source_block), dtype=np.float64)
+        )
+        output_square_sum += float(
+            np.sum(np.square(output_block), dtype=np.float64)
+        )
+        residual_square_sum += float(
+            np.sum(np.square(output_block - source_block), dtype=np.float64)
+        )
+        dot_sum += float(np.sum(source_block * output_block, dtype=np.float64))
+    source_rms = math.sqrt(source_square_sum / source.size)
+    output_rms = math.sqrt(output_square_sum / output.size)
+    residual_rms = math.sqrt(residual_square_sum / source.size)
+    denominator = math.sqrt(source_square_sum * output_square_sum)
+    measured_rms = (source_rms, output_rms, residual_rms)
+    if (
+        not all(math.isfinite(value) for value in measured_rms)
+        or source_rms <= 0.0
+        or output_rms <= 0.0
+        or residual_rms <= 0.0
+        or denominator <= 0.0
+    ):
+        raise RuntimeError("audio-only effect must produce a finite nonidentity output")
+    return {
+        "source_rms": source_rms,
+        "output_rms": output_rms,
+        "residual_rms": residual_rms,
+        "residual_to_source_rms_ratio": residual_rms / source_rms,
+        "normalized_correlation": dot_sum / denominator,
+    }
 
 
 def _float64_array_sha256(audio: np.ndarray) -> str:
@@ -1182,6 +1266,75 @@ def reverb_filters_v1(
         audio_info=audio_info,
         midi=midi,
         qc=peak_qc,
+    )
+
+
+def reverb_only_v1(
+    audio_path: os.PathLike,
+    midi_path: os.PathLike,
+    output_audio_path: os.PathLike,
+    output_midi_path: os.PathLike,
+    *,
+    seed: int,
+    parameters: ReverbOnlyParameters,
+    provenance_path: Optional[os.PathLike] = None,
+) -> Dict[str, Any]:
+    """Apply deterministic FreeVerb without high-pass or low-pass filters."""
+
+    _validate_seed(seed)
+    _validate_reverb_only(parameters)
+    (
+        source_audio,
+        source_midi,
+        target_audio,
+        target_midi,
+        target_provenance,
+    ) = _output_paths(
+        audio_path,
+        midi_path,
+        output_audio_path,
+        output_midi_path,
+        provenance_path,
+    )
+    audio, sample_rate, audio_info, midi = _load_pair(source_audio, source_midi)
+    _validate_loaded_pair(audio, sample_rate, midi)
+    board = Pedalboard(
+        [
+            Reverb(
+                room_size=float(parameters.room_size),
+                damping=float(parameters.damping),
+                wet_level=float(parameters.wet_level),
+                dry_level=float(parameters.dry_level),
+                width=float(parameters.width),
+                freeze_mode=float(parameters.freeze_mode),
+            )
+        ]
+    )
+    rendered = _pedalboard_audio(audio, sample_rate, board)
+    rendered, peak_qc = _peak_guard(rendered)
+    change_qc = _paired_audio_change_qc(audio, rendered)
+    return _publish_audio_only(
+        transform="reverb_only_v1",
+        seed=seed,
+        parameters=asdict(parameters),
+        source_audio=source_audio,
+        source_midi=source_midi,
+        target_audio=target_audio,
+        target_midi=target_midi,
+        target_provenance=target_provenance,
+        output_audio=rendered,
+        audio=audio,
+        sample_rate=sample_rate,
+        audio_info=audio_info,
+        midi=midi,
+        qc={
+            **peak_qc,
+            **change_qc,
+            "effect_chain": ["pedalboard.Reverb"],
+            "highpass_filter_applied": False,
+            "lowpass_filter_applied": False,
+            "all_reverb_parameters_explicit": True,
+        },
     )
 
 
