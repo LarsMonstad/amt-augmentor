@@ -6,8 +6,8 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -18,18 +18,14 @@ import soundfile as sf
 
 from amt_augmentor._paired_io import _validate_seed
 from amt_augmentor.conventional_augmentations import (
-    MODEL_MAXIMUM_MIDI_PITCH,
-    MODEL_MINIMUM_MIDI_PITCH,
+    MIDI_MAXIMUM_PITCH,
+    MIDI_MINIMUM_PITCH,
     PitchShiftParameters,
     pitch_shift_v1,
 )
 
-CONSERVATIVE_PITCH_SHIFT_GRID_V1 = (-2, -1, 1, 2)
-DENSE_PITCH_SHIFT_GRID_V1 = (-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6)
 MANIFEST_SCHEMA_VERSION = 1
 MANIFEST_KIND = "amt_augmentor_pitch_shift_grid_v1"
-PUBLISHED_FILE_MODE = 0o640
-PUBLISHED_DIRECTORY_MODE = 0o750
 TIME_QUANTIZATION_DECIMALS = 4
 
 
@@ -70,8 +66,8 @@ def validate_pitch_shift_grid_v1(
     *,
     source_pitch_minimum: Optional[int] = None,
     source_pitch_maximum: Optional[int] = None,
-    minimum_midi_pitch: int = MODEL_MINIMUM_MIDI_PITCH,
-    maximum_midi_pitch: int = MODEL_MAXIMUM_MIDI_PITCH,
+    minimum_midi_pitch: int = MIDI_MINIMUM_PITCH,
+    maximum_midi_pitch: int = MIDI_MAXIMUM_PITCH,
 ) -> Tuple[int, ...]:
     """Validate one explicit, ordered, nonzero integral shift grid."""
 
@@ -105,9 +101,13 @@ def validate_pitch_shift_grid_v1(
         if not 0 <= source_pitch_minimum <= source_pitch_maximum <= 127:
             raise ValueError("source MIDI pitch bounds are invalid")
         if source_pitch_minimum + min(values) < minimum_midi_pitch:
-            raise ValueError("pitch grid would move a label below the model range")
+            raise ValueError(
+                "pitch grid would move a label below the output MIDI range"
+            )
         if source_pitch_maximum + max(values) > maximum_midi_pitch:
-            raise ValueError("pitch grid would move a label above the model range")
+            raise ValueError(
+                "pitch grid would move a label above the output MIDI range"
+            )
     return values
 
 
@@ -167,16 +167,61 @@ def _aligned_frequency_score(
     return numerator / denominator
 
 
+def _count_cqt_bins_below_frequency_limit(
+    fmin_hz: float,
+    frequency_limit_hz: float,
+) -> int:
+    """Count semitone-spaced centers strictly below a frequency limit."""
+
+    if (
+        not math.isfinite(fmin_hz)
+        or not math.isfinite(frequency_limit_hz)
+        or fmin_hz <= 0.0
+        or frequency_limit_hz <= 0.0
+    ):
+        raise ValueError("CQT frequency bounds must be finite and positive")
+    if fmin_hz >= frequency_limit_hz:
+        return 0
+
+    highest_index = math.floor(
+        12.0 * math.log2(frequency_limit_hz / fmin_hz)
+    )
+
+    def center(index: int) -> float:
+        return fmin_hz * (2.0 ** (index / 12.0))
+
+    # Floating log2 can round an exact power-of-two ratio upward to the strict
+    # boundary.  Correct both directions against the actual bin-center formula
+    # used by the CQT instead of relying on floor/ceil alone.
+    while highest_index >= 0 and center(highest_index) >= frequency_limit_hz:
+        highest_index -= 1
+    while center(highest_index + 1) < frequency_limit_hz:
+        highest_index += 1
+    return highest_index + 1
+
+
 def _absolute_frequency_cqt(
     audio_path: os.PathLike,
     *,
     n_bins: Optional[int] = None,
     hop_length: int = 4096,
-) -> Tuple[np.ndarray, Dict[str, int]]:
+    fmin_hz: Optional[float] = None,
+) -> Tuple[np.ndarray, Dict[str, Any]]:
     audio, sample_rate = sf.read(str(audio_path), always_2d=True)
     mono = np.asarray(audio.mean(axis=1), dtype=np.float32)
-    fmin = float(librosa.note_to_hz("C1"))
-    maximum_bins = math.floor(12.0 * math.log2((sample_rate * 0.45) / fmin))
+    fmin = (
+        float(librosa.note_to_hz("C1"))
+        if fmin_hz is None
+        else float(fmin_hz)
+    )
+    if not math.isfinite(fmin) or fmin <= 0.0:
+        raise ValueError("pitch-shift QC fmin_hz must be finite and positive")
+    maximum_bins = _count_cqt_bins_below_frequency_limit(
+        fmin,
+        sample_rate * 0.45,
+    )
+    if n_bins is not None and type(n_bins) is not int:
+        raise TypeError("pitch-shift QC n_bins must be a built-in int")
     selected_bins = min(96, maximum_bins) if n_bins is None else n_bins
     if selected_bins <= 0 or selected_bins > maximum_bins:
         raise ValueError("invalid CQT frequency extent for pitch-shift QC")
@@ -198,6 +243,96 @@ def _absolute_frequency_cqt(
         "channel_count": int(audio.shape[1]),
         "n_bins": int(selected_bins),
         "hop_length": int(hop_length),
+        "fmin_hz": fmin,
+    }
+
+
+def _pitch_grid_qc_plan(
+    shifts: Tuple[int, ...],
+    *,
+    source_pitch_minimum: int,
+    source_pitch_maximum: int,
+    sample_rate: int,
+) -> Dict[str, Any]:
+    """Derive directed QC alternatives and a source-aware CQT extent."""
+
+    requested_candidates = {0}
+    for shift in shifts:
+        requested_candidates.update((shift - 1, shift, shift + 1))
+
+    maximum_cqt_hz = sample_rate * 0.45
+    candidates = []
+    clipped_candidates = []
+    for candidate in sorted(requested_candidates):
+        output_minimum = source_pitch_minimum + candidate
+        output_maximum = source_pitch_maximum + candidate
+        scoreable = (
+            output_minimum >= MIDI_MINIMUM_PITCH
+            and output_maximum <= MIDI_MAXIMUM_PITCH
+            and float(librosa.midi_to_hz(output_maximum)) < maximum_cqt_hz
+        )
+        (candidates if scoreable else clipped_candidates).append(candidate)
+
+    missing_required = sorted(set(shifts + (0,)) - set(candidates))
+    if missing_required:
+        raise ValueError(
+            "sample rate and MIDI pitch extent cannot acoustically verify "
+            f"required pitch shifts {missing_required} below 0.45 * sample_rate"
+        )
+
+    candidate_tuple = tuple(candidates)
+    largest_shift = max(abs(value) for value in candidate_tuple)
+    relevant_minimum = min(
+        source_pitch_minimum,
+        source_pitch_minimum + min(candidate_tuple),
+    )
+    relevant_maximum = max(
+        source_pitch_maximum,
+        source_pitch_maximum + max(candidate_tuple),
+    )
+    padding_semitones = 24 + largest_shift
+    fmin_midi = max(
+        MIDI_MINIMUM_PITCH,
+        math.floor(relevant_minimum - padding_semitones),
+    )
+    desired_maximum_midi = min(
+        MIDI_MAXIMUM_PITCH,
+        math.ceil(relevant_maximum + padding_semitones),
+    )
+    fmin_hz = float(librosa.midi_to_hz(fmin_midi))
+    maximum_bins = _count_cqt_bins_below_frequency_limit(
+        fmin_hz,
+        maximum_cqt_hz,
+    )
+    desired_bins = desired_maximum_midi - fmin_midi + 1
+    n_bins = min(desired_bins, maximum_bins)
+    maximum_cqt_midi_pitch = fmin_midi + n_bins - 1
+    maximum_cqt_center_hz = fmin_hz * (2.0 ** ((n_bins - 1) / 12.0))
+    if maximum_cqt_midi_pitch < relevant_maximum:
+        raise ValueError(
+            "derived CQT extent does not include the highest required MIDI "
+            f"pitch {relevant_maximum}"
+        )
+    if n_bins <= 24 + largest_shift:
+        raise ValueError(
+            "sample rate and source pitch extent leave too few CQT bins for "
+            "directed pitch-shift QC"
+        )
+    return {
+        "candidates": candidate_tuple,
+        "clipped_candidates": clipped_candidates,
+        "candidate_policy": (
+            "zero, every requested shift, and each requested shift +/- 1; "
+            "alternatives outside MIDI 0..127 or above 0.45 * sample_rate "
+            "are clipped, while requested shifts fail closed"
+        ),
+        "fmin_hz": fmin_hz,
+        "fmin_midi": fmin_midi,
+        "n_bins": n_bins,
+        "maximum_cqt_hz": maximum_cqt_hz,
+        "maximum_cqt_midi_pitch": maximum_cqt_midi_pitch,
+        "maximum_cqt_center_hz": maximum_cqt_center_hz,
+        "relevant_midi_pitch_extent": [relevant_minimum, relevant_maximum],
     }
 
 
@@ -251,8 +386,16 @@ def measure_absolute_pitch_shift_v1(
     *,
     expected_semitones: int,
     candidate_semitones: Iterable[int],
+    fmin_hz: Optional[float] = None,
+    n_bins: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Measure a directed shift on a non-wrapping absolute-frequency CQT."""
+    """Measure a directed shift on a non-wrapping absolute-frequency CQT.
+
+    The standalone default starts at C1 and uses up to 96 bins.  Callers whose
+    source or shifted content falls outside that span must provide an explicit
+    ``fmin_hz`` and ``n_bins``; the grid materializer derives both from its
+    source MIDI pitch extent and requested shifts.
+    """
 
     if type(expected_semitones) is not int:
         raise TypeError("expected_semitones must be a built-in int")
@@ -260,18 +403,23 @@ def measure_absolute_pitch_shift_v1(
     if any(type(value) is not int for value in raw_candidates):
         raise TypeError("candidate semitone shifts must be built-in ints")
     candidates = tuple(sorted(set(raw_candidates) | {0, expected_semitones}))
-    source_cqt, source_info = _absolute_frequency_cqt(source_audio_path)
+    source_cqt, source_info = _absolute_frequency_cqt(
+        source_audio_path,
+        fmin_hz=fmin_hz,
+        n_bins=n_bins,
+    )
     output_cqt, output_info = _absolute_frequency_cqt(
         output_audio_path,
         n_bins=source_info["n_bins"],
         hop_length=source_info["hop_length"],
+        fmin_hz=source_info["fmin_hz"],
     )
     if any(
         output_info[field] != source_info[field]
         for field in ("sample_rate_hz", "sample_count", "channel_count")
     ):
         raise ValueError("pitch-shift QC requires matching audio shape and sample rate")
-    return _pitch_shift_measurement_from_cqt(
+    measurement = _pitch_shift_measurement_from_cqt(
         source_cqt,
         output_cqt,
         expected_semitones=expected_semitones,
@@ -279,6 +427,11 @@ def measure_absolute_pitch_shift_v1(
         n_bins=source_info["n_bins"],
         hop_length=source_info["hop_length"],
     )
+    measurement["fmin_hz"] = source_info["fmin_hz"]
+    measurement["maximum_cqt_center_hz"] = source_info["fmin_hz"] * (
+        2.0 ** ((source_info["n_bins"] - 1) / 12.0)
+    )
+    return measurement
 
 
 def _write_manifest(path: Path, manifest: Dict[str, Any]) -> None:
@@ -287,7 +440,23 @@ def _write_manifest(path: Path, manifest: Dict[str, Any]) -> None:
         handle.write(b"\n")
         handle.flush()
         os.fsync(handle.fileno())
-    os.chmod(path, PUBLISHED_FILE_MODE)
+
+
+def _new_staging_directory(target: Path) -> Path:
+    """Create a sibling directory with ordinary umask-filtered permissions."""
+
+    for _ in range(100):
+        stage = target.parent / (
+            f".{target.name}.staging-{secrets.token_hex(8)}"
+        )
+        try:
+            os.mkdir(stage, 0o777)
+        except FileExistsError:
+            continue
+        return stage
+    raise FileExistsError(
+        f"Unable to reserve a unique staging directory beside {target}"
+    )
 
 
 def _expected_inventory(manifest: Dict[str, Any]) -> set[str]:
@@ -319,7 +488,7 @@ def verify_pitch_shift_grid_v1(output_root: os.PathLike) -> Dict[str, Any]:
         "kind",
         "seed",
         "semitones",
-        "model_pitch_bounds",
+        "output_midi_pitch_bounds",
         "source",
         "outputs",
         "manifest_semantic_sha256",
@@ -337,12 +506,12 @@ def verify_pitch_shift_grid_v1(output_root: os.PathLike) -> Dict[str, Any]:
         semantic_digest, "manifest semantic digest"
     ) != _canonical_sha256(semantic_document):
         raise ValueError("pitch-shift grid manifest semantic digest mismatch")
-    model_bounds = manifest["model_pitch_bounds"]
-    if not isinstance(model_bounds, dict) or set(model_bounds) != {
+    output_midi_bounds = manifest["output_midi_pitch_bounds"]
+    if not isinstance(output_midi_bounds, dict) or set(output_midi_bounds) != {
         "minimum",
         "maximum",
     }:
-        raise ValueError("pitch-shift grid model bounds are invalid")
+        raise ValueError("pitch-shift grid output MIDI bounds are invalid")
     source = manifest["source"]
     expected_source_keys = {
         "audio_name",
@@ -368,9 +537,18 @@ def verify_pitch_shift_grid_v1(output_root: os.PathLike) -> Dict[str, Any]:
         manifest["semitones"],
         source_pitch_minimum=source["pitch_minimum"],
         source_pitch_maximum=source["pitch_maximum"],
-        minimum_midi_pitch=model_bounds["minimum"],
-        maximum_midi_pitch=model_bounds["maximum"],
+        minimum_midi_pitch=output_midi_bounds["minimum"],
+        maximum_midi_pitch=output_midi_bounds["maximum"],
     )
+    qc_plan = _pitch_grid_qc_plan(
+        shifts,
+        source_pitch_minimum=source["pitch_minimum"],
+        source_pitch_maximum=source["pitch_maximum"],
+        sample_rate=source["sample_rate_hz"],
+    )
+    expected_candidate_score_keys = {
+        str(value) for value in qc_plan["candidates"]
+    }
     outputs = manifest["outputs"]
     if not isinstance(outputs, list) or len(outputs) != len(shifts):
         raise ValueError("pitch-shift grid output count is invalid")
@@ -421,6 +599,10 @@ def verify_pitch_shift_grid_v1(output_root: os.PathLike) -> Dict[str, Any]:
             provenance.get("transform") != "pitch_shift_v1"
             or provenance.get("seed") != output["seed"]
             or provenance.get("parameters", {}).get("semitones") != expected_shift
+            or provenance.get("parameters", {}).get("minimum_midi_pitch")
+            != output_midi_bounds["minimum"]
+            or provenance.get("parameters", {}).get("maximum_midi_pitch")
+            != output_midi_bounds["maximum"]
             or provenance.get("output", {}).get("audio_sha256")
             != output["audio_sha256"]
             or provenance.get("output", {}).get("midi_sha256") != output["midi_sha256"]
@@ -432,6 +614,23 @@ def verify_pitch_shift_grid_v1(output_root: os.PathLike) -> Dict[str, Any]:
             or acoustic_qc.get("expected_semitones") != expected_shift
             or acoustic_qc.get("best_semitones") != expected_shift
             or not float(acoustic_qc.get("runner_up_margin", 0.0)) > 0.0
+            or not isinstance(acoustic_qc.get("candidate_scores"), dict)
+            or set(acoustic_qc.get("candidate_scores", {}))
+            != expected_candidate_score_keys
+            or acoustic_qc.get("candidate_policy") != qc_plan["candidate_policy"]
+            or acoustic_qc.get("clipped_candidate_semitones")
+            != qc_plan["clipped_candidates"]
+            or acoustic_qc.get("n_bins") != qc_plan["n_bins"]
+            or acoustic_qc.get("cqt_fmin_midi") != qc_plan["fmin_midi"]
+            or acoustic_qc.get("cqt_fmin_hz") != qc_plan["fmin_hz"]
+            or acoustic_qc.get("cqt_frequency_limit_hz")
+            != qc_plan["maximum_cqt_hz"]
+            or acoustic_qc.get("cqt_maximum_midi_pitch")
+            != qc_plan["maximum_cqt_midi_pitch"]
+            or acoustic_qc.get("cqt_maximum_center_hz")
+            != qc_plan["maximum_cqt_center_hz"]
+            or acoustic_qc.get("relevant_midi_pitch_extent")
+            != qc_plan["relevant_midi_pitch_extent"]
         ):
             raise ValueError("pitch-shift grid acoustic QC is invalid")
     return {
@@ -450,8 +649,8 @@ def materialize_pitch_shift_grid_v1(
     *,
     seed: int,
     semitones: Sequence[int],
-    minimum_midi_pitch: int = MODEL_MINIMUM_MIDI_PITCH,
-    maximum_midi_pitch: int = MODEL_MAXIMUM_MIDI_PITCH,
+    minimum_midi_pitch: int = MIDI_MINIMUM_PITCH,
+    maximum_midi_pitch: int = MIDI_MAXIMUM_PITCH,
 ) -> Dict[str, Any]:
     """Atomically render and verify every requested whole-recording shift."""
 
@@ -475,13 +674,21 @@ def materialize_pitch_shift_grid_v1(
     if os.path.lexists(str(target)):
         raise FileExistsError(f"Refusing to overwrite existing output: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(
-        tempfile.mkdtemp(dir=str(target.parent), prefix=f".{target.name}.staging-")
-    )
+    stage = _new_staging_directory(target)
     try:
         source_info = sf.info(str(source_audio))
-        qc_candidates = tuple(sorted(set(DENSE_PITCH_SHIFT_GRID_V1 + (0,))))
-        source_cqt, source_cqt_info = _absolute_frequency_cqt(source_audio)
+        qc_plan = _pitch_grid_qc_plan(
+            shifts,
+            source_pitch_minimum=min(source_pitches),
+            source_pitch_maximum=max(source_pitches),
+            sample_rate=int(source_info.samplerate),
+        )
+        qc_candidates = qc_plan["candidates"]
+        source_cqt, source_cqt_info = _absolute_frequency_cqt(
+            source_audio,
+            n_bins=qc_plan["n_bins"],
+            fmin_hz=qc_plan["fmin_hz"],
+        )
         output_records = []
         for shift in shifts:
             token = _shift_token(shift)
@@ -506,6 +713,7 @@ def materialize_pitch_shift_grid_v1(
                 output_audio,
                 n_bins=source_cqt_info["n_bins"],
                 hop_length=source_cqt_info["hop_length"],
+                fmin_hz=source_cqt_info["fmin_hz"],
             )
             if any(
                 output_cqt_info[field] != source_cqt_info[field]
@@ -521,6 +729,24 @@ def materialize_pitch_shift_grid_v1(
                 candidates=qc_candidates,
                 n_bins=source_cqt_info["n_bins"],
                 hop_length=source_cqt_info["hop_length"],
+            )
+            acoustic_qc.update(
+                {
+                    "candidate_policy": qc_plan["candidate_policy"],
+                    "clipped_candidate_semitones": qc_plan["clipped_candidates"],
+                    "cqt_fmin_hz": qc_plan["fmin_hz"],
+                    "cqt_fmin_midi": qc_plan["fmin_midi"],
+                    "cqt_frequency_limit_hz": qc_plan["maximum_cqt_hz"],
+                    "cqt_maximum_midi_pitch": qc_plan[
+                        "maximum_cqt_midi_pitch"
+                    ],
+                    "cqt_maximum_center_hz": qc_plan[
+                        "maximum_cqt_center_hz"
+                    ],
+                    "relevant_midi_pitch_extent": qc_plan[
+                        "relevant_midi_pitch_extent"
+                    ],
+                }
             )
             output_records.append(
                 {
@@ -540,7 +766,7 @@ def materialize_pitch_shift_grid_v1(
             "kind": MANIFEST_KIND,
             "seed": seed,
             "semitones": list(shifts),
-            "model_pitch_bounds": {
+            "output_midi_pitch_bounds": {
                 "minimum": minimum_midi_pitch,
                 "maximum": maximum_midi_pitch,
             },
@@ -561,10 +787,6 @@ def materialize_pitch_shift_grid_v1(
         }
         manifest["manifest_semantic_sha256"] = _canonical_sha256(manifest)
         _write_manifest(stage / "pitch-shift-grid-manifest.json", manifest)
-        for path in stage.iterdir():
-            if path.is_file():
-                os.chmod(path, PUBLISHED_FILE_MODE)
-        os.chmod(stage, PUBLISHED_DIRECTORY_MODE)
         verify_pitch_shift_grid_v1(stage)
         if os.path.lexists(str(target)):
             raise FileExistsError(f"Refusing to overwrite existing output: {target}")

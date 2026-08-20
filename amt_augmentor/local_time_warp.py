@@ -4,6 +4,11 @@
 full-recording, nonuniform phase-vocoder pass; it does not cut, repeat, loop,
 or splice audio chunks.  The exact source-sample to target-sample map used for
 the audio and every MIDI time boundary is included in its provenance.
+
+The defaults are the conservative profile used in the forthcoming Galdr
+Hardanger-fiddle case study.  They are retained for reproducibility, not as a
+claim that one local-rate envelope is optimal for every AMT corpus; callers
+may select any profile inside the documented safety bounds below.
 """
 
 from __future__ import annotations
@@ -16,7 +21,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import librosa
 import numpy as np
-import pretty_midi
 
 from amt_augmentor._paired_io import (
     _attach_plan_config,
@@ -24,6 +28,7 @@ from amt_augmentor._paired_io import (
     _load_pair,
     _provenance_base,
     _stage_and_publish_bundle,
+    _validate_loaded_pair,
     _validate_output_paths,
     _validate_seed,
 )
@@ -35,15 +40,25 @@ LOCAL_TIME_WARP_ANCHOR_SECONDS = 2.0
 LOCAL_TIME_WARP_CORRELATION_SECONDS = 12.0
 LOCAL_TIME_WARP_N_FFT = 2048
 LOCAL_TIME_WARP_HOP_LENGTH = 512
+SAFE_MINIMUM_RATE_LOWER_BOUND = 0.5
+SAFE_MAXIMUM_RATE_UPPER_BOUND = 2.0
+SAFE_MINIMUM_ANCHOR_SECONDS = 0.1
+SAFE_MAXIMUM_ANCHOR_SECONDS = 60.0
+SAFE_MAXIMUM_CORRELATION_SECONDS = 600.0
+SAFE_MINIMUM_N_FFT = 256
+SAFE_MAXIMUM_N_FFT = 32768
 
 
 @dataclass(frozen=True)
 class LocalTimeWarpParameters:
-    """Fixed safe operating envelope for :func:`local_time_warp_v1`.
+    """Operating profile for :func:`local_time_warp_v1`.
 
-    These defaults are intentionally explicit in the API and provenance.  The
-    transform accepts no wider rate envelope: a local warp is useful only when
-    it remains a subtle, label-preserving perturbation.
+    ``minimum_rate`` must be in ``[0.5, 1)``, ``maximum_rate`` in ``(1, 2]``,
+    ``anchor_seconds`` in ``[0.1, 60]``, and ``correlation_seconds`` from one
+    anchor interval through 600 seconds.  ``n_fft`` must be a power of two in
+    ``[256, 32768]``; ``hop_length`` must divide it.  The defaults reproduce
+    the conservative Hardanger-fiddle case-study profile, but are not asserted
+    to be universally optimal for AMT.
     """
 
     minimum_rate: float = LOCAL_TIME_WARP_MINIMUM_RATE
@@ -75,56 +90,31 @@ def _validate_parameters(parameters: LocalTimeWarpParameters) -> None:
     )
     if type(parameters.n_fft) is not int or type(parameters.hop_length) is not int:
         raise TypeError("n_fft and hop_length must be built-in ints")
-    if (
-        minimum_rate != LOCAL_TIME_WARP_MINIMUM_RATE
-        or maximum_rate != LOCAL_TIME_WARP_MAXIMUM_RATE
-        or anchor_seconds != LOCAL_TIME_WARP_ANCHOR_SECONDS
-        or correlation_seconds != LOCAL_TIME_WARP_CORRELATION_SECONDS
-        or parameters.n_fft != LOCAL_TIME_WARP_N_FFT
-        or parameters.hop_length != LOCAL_TIME_WARP_HOP_LENGTH
-    ):
+    if not SAFE_MINIMUM_RATE_LOWER_BOUND <= minimum_rate < 1.0:
         raise ValueError(
-            "local_time_warp_v1 has a fixed 0.94--1.06 rate envelope, "
-            "2 s anchors, 12 s correlation, n_fft=2048, and hop_length=512"
+            "minimum_rate must satisfy 0.5 <= minimum_rate < 1"
         )
-
-
-def _validate_loaded_pair(
-    audio: np.ndarray,
-    sample_rate: int,
-    midi: pretty_midi.PrettyMIDI,
-) -> None:
-    if audio.ndim != 2 or audio.shape[0] <= 0 or audio.shape[1] <= 0:
-        raise ValueError("audio must contain a non-empty samples-by-channels array")
-    if sample_rate <= 0:
-        raise ValueError("sample rate must be positive")
-    if not np.isfinite(audio).all():
-        raise ValueError("input audio contains NaN or infinite samples")
-    if len(midi.instruments) != 1:
-        raise ValueError("MIDI must contain exactly one instrument")
-    instrument = midi.instruments[0]
-    if instrument.is_drum:
-        raise ValueError("MIDI instrument must not be a drum track")
-    if instrument.control_changes or instrument.pitch_bends:
-        raise ValueError("MIDI controls and pitch bends are not supported")
-    if not instrument.notes:
-        raise ValueError("MIDI must contain at least one note")
-    audio_duration = audio.shape[0] / sample_rate
-    for index, note in enumerate(instrument.notes):
-        if (
-            not math.isfinite(float(note.start))
-            or not math.isfinite(float(note.end))
-            or note.start < 0.0
-            or note.end <= note.start
-        ):
-            raise ValueError(f"MIDI note {index} has an invalid time interval")
-        if not 0 <= int(note.pitch) <= 127 or not 1 <= int(note.velocity) <= 127:
-            raise ValueError(f"MIDI note {index} has invalid MIDI values")
-        if float(note.end) > audio_duration:
-            raise ValueError(
-                f"MIDI note {index} ends beyond the audio duration "
-                f"({float(note.end):.9f} > {audio_duration:.9f} seconds)"
-            )
+    if not 1.0 < maximum_rate <= SAFE_MAXIMUM_RATE_UPPER_BOUND:
+        raise ValueError(
+            "maximum_rate must satisfy 1 < maximum_rate <= 2"
+        )
+    if not SAFE_MINIMUM_ANCHOR_SECONDS <= anchor_seconds <= SAFE_MAXIMUM_ANCHOR_SECONDS:
+        raise ValueError("anchor_seconds must be in [0.1, 60]")
+    if not anchor_seconds <= correlation_seconds <= SAFE_MAXIMUM_CORRELATION_SECONDS:
+        raise ValueError(
+            "correlation_seconds must be at least anchor_seconds and at most 600"
+        )
+    if (
+        not SAFE_MINIMUM_N_FFT <= parameters.n_fft <= SAFE_MAXIMUM_N_FFT
+        or parameters.n_fft & (parameters.n_fft - 1)
+    ):
+        raise ValueError("n_fft must be a power of two in [256, 32768]")
+    if (
+        parameters.hop_length <= 0
+        or parameters.hop_length > parameters.n_fft
+        or parameters.n_fft % parameters.hop_length != 0
+    ):
+        raise ValueError("hop_length must be positive and divide n_fft")
 
 
 def _output_paths(
@@ -169,10 +159,14 @@ def _peak_guard(audio: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
     }
 
 
-def _source_anchor_samples(sample_count: int, sample_rate: int) -> np.ndarray:
+def _source_anchor_samples(
+    sample_count: int,
+    sample_rate: int,
+    anchor_seconds: float,
+) -> np.ndarray:
     """Return exact source-domain anchors, including 0 and the duration N."""
 
-    stride = round(LOCAL_TIME_WARP_ANCHOR_SECONDS * sample_rate)
+    stride = round(anchor_seconds * sample_rate)
     if stride <= 0:
         raise RuntimeError("local time-warp anchor stride is not positive")
     anchors = np.arange(0, sample_count, stride, dtype=np.int64)
@@ -200,57 +194,78 @@ def _build_sample_map(
     sample_count: int,
     sample_rate: int,
     seed: int,
+    parameters: LocalTimeWarpParameters,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
     """Build an exact monotonic source-sample -> target-sample knot map.
 
-    The source anchors are two seconds apart.  Segment rates are seeded,
-    Gaussian-smoothed at a six-anchor sigma (approximately 12 seconds), then
-    constrained to have a source-duration weighted mean of exactly one.  Thus
-    both sample-map endpoints are exactly ``(0, 0)`` and ``(N, N)``.
+    Segment rates are seeded, Gaussian-smoothed using the requested anchor and
+    correlation scales, then constrained to have a source-duration weighted
+    mean of exactly one.  Thus both sample-map endpoints are exactly ``(0, 0)``
+    and ``(N, N)`` for every valid profile.
     """
 
-    source = _source_anchor_samples(sample_count, sample_rate).astype(np.float64)
+    minimum_rate = float(parameters.minimum_rate)
+    maximum_rate = float(parameters.maximum_rate)
+    anchor_seconds = float(parameters.anchor_seconds)
+    correlation_seconds = float(parameters.correlation_seconds)
+    source = _source_anchor_samples(
+        sample_count,
+        sample_rate,
+        anchor_seconds,
+    ).astype(np.float64)
     source_lengths = np.diff(source)
     segment_count = int(source_lengths.size)
+    if segment_count < 4:
+        raise ValueError(
+            "local_time_warp_v1 needs at least four anchor segments to create "
+            "a nonidentity endpoint-fixed map; use a shorter anchor interval "
+            "or a longer recording"
+        )
     rates = np.ones(segment_count, dtype=np.float64)
-    sigma_anchors = LOCAL_TIME_WARP_CORRELATION_SECONDS / LOCAL_TIME_WARP_ANCHOR_SECONDS
+    sigma_anchors = correlation_seconds / anchor_seconds
 
     # Two endpoint segments are held at exactly one.  At least two interior
     # degrees of freedom are needed to add a nonzero, endpoint-fixed, zero-mean
-    # local warp; shorter records therefore correctly reduce to the identity.
-    if segment_count >= 4:
-        rng = np.random.default_rng(seed)
-        variation = _gaussian_smooth_seeded_values(
-            rng.standard_normal(segment_count),
-            sigma_anchors,
-        )
-        endpoint_window = np.sin(
-            np.pi * np.arange(segment_count, dtype=np.float64) / (segment_count - 1)
-        )
-        endpoint_window[0] = 0.0
-        endpoint_window[-1] = 0.0
-        variation *= endpoint_window
-        correction_denominator = float(np.dot(endpoint_window, source_lengths))
-        if correction_denominator <= 0.0:
-            raise RuntimeError("local time-warp cannot construct a zero-mean rate")
-        variation -= (
-            float(np.dot(variation, source_lengths))
-            / correction_denominator
-            * endpoint_window
-        )
-        variation[0] = 0.0
-        variation[-1] = 0.0
-        maximum_deviation = float(np.max(np.abs(variation), initial=0.0))
-        if maximum_deviation > 0.0:
-            variation *= (LOCAL_TIME_WARP_MAXIMUM_RATE - 1.0) / maximum_deviation
-            rates += variation
+    # local warp; profiles with fewer segments fail above instead of silently
+    # publishing an identity augmentation.
+    rng = np.random.default_rng(seed)
+    variation = _gaussian_smooth_seeded_values(
+        rng.standard_normal(segment_count),
+        sigma_anchors,
+    )
+    endpoint_window = np.sin(
+        np.pi * np.arange(segment_count, dtype=np.float64) / (segment_count - 1)
+    )
+    endpoint_window[0] = 0.0
+    endpoint_window[-1] = 0.0
+    variation *= endpoint_window
+    correction_denominator = float(np.dot(endpoint_window, source_lengths))
+    if correction_denominator <= 0.0:
+        raise RuntimeError("local time-warp cannot construct a zero-mean rate")
+    variation -= (
+        float(np.dot(variation, source_lengths))
+        / correction_denominator
+        * endpoint_window
+    )
+    variation[0] = 0.0
+    variation[-1] = 0.0
+    positive_deviation = float(np.max(variation, initial=0.0))
+    negative_deviation = float(-np.min(variation, initial=0.0))
+    if positive_deviation <= 0.0 or negative_deviation <= 0.0:
+        raise RuntimeError("local time-warp constructed no nonzero variation")
+    scale = min(
+        (maximum_rate - 1.0) / positive_deviation,
+        (1.0 - minimum_rate) / negative_deviation,
+    )
+    variation *= scale
+    rates += variation
 
     if (
         not np.isfinite(rates).all()
         or rates[0] != 1.0
         or rates[-1] != 1.0
-        or np.min(rates) < LOCAL_TIME_WARP_MINIMUM_RATE - 1e-12
-        or np.max(rates) > LOCAL_TIME_WARP_MAXIMUM_RATE + 1e-12
+        or np.min(rates) < minimum_rate - 1e-12
+        or np.max(rates) > maximum_rate + 1e-12
     ):
         raise RuntimeError("local time-warp constructed an invalid local-rate map")
 
@@ -277,8 +292,8 @@ def _build_sample_map(
 
     realized_rates = np.diff(target) / source_lengths
     if (
-        np.min(realized_rates) < LOCAL_TIME_WARP_MINIMUM_RATE - 1e-12
-        or np.max(realized_rates) > LOCAL_TIME_WARP_MAXIMUM_RATE + 1e-12
+        np.min(realized_rates) < minimum_rate - 1e-12
+        or np.max(realized_rates) > maximum_rate + 1e-12
         or abs(realized_rates[0] - 1.0) > 1e-12
         or abs(realized_rates[-1] - 1.0) > 1e-12
     ):
@@ -303,10 +318,13 @@ def _build_sample_map(
             ],
             "minimum_rate": float(np.min(realized_rates)),
             "maximum_rate": float(np.max(realized_rates)),
+            "configured_minimum_rate": minimum_rate,
+            "configured_maximum_rate": maximum_rate,
             "endpoint_rates": [float(realized_rates[0]), float(realized_rates[-1])],
-            "anchor_seconds": LOCAL_TIME_WARP_ANCHOR_SECONDS,
-            "correlation_seconds": LOCAL_TIME_WARP_CORRELATION_SECONDS,
+            "anchor_seconds": anchor_seconds,
+            "correlation_seconds": correlation_seconds,
             "gaussian_sigma_anchors": sigma_anchors,
+            "variation_applied": True,
             "endpoint_pairs": [[0, 0], [sample_count, sample_count]],
         },
     )
@@ -463,6 +481,7 @@ def local_time_warp_v1(
         int(audio.shape[0]),
         sample_rate,
         seed,
+        parameters,
     )
     rendered, time_steps = _render_continuous_nonuniform_phase_vocoder(
         audio,

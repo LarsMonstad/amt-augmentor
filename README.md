@@ -18,15 +18,18 @@
 >
 > **Note:** Formerly known as `amt-augpy`. Starting with v1.0.9, the package is **`amt-augmentor`**.
 
-For the deterministic Galdr training-only O/C materializer, see
-[the Galdr conventional campaign guide](docs/GALDR_CONVENTIONAL_CAMPAIGN.md).
-
 A Python toolkit for augmenting Automatic Music Transcription (AMT) datasets
 through conventional audio transformations while maintaining synchronization
-between audio and MIDI files. The dataset follows the same metadata concepts as
-[MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro).
+between audio and MIDI files. Its optional CSV helpers follow the same metadata
+concepts as [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro).
 
-The toolkit expects a folder containing paired audio and MIDI files with matching names. The audio file and MIDI file must be ground truth data, as this toolkit is only for augmenting existing datasets - a common technique in Machine Learning.
+The toolkit expects a folder containing paired audio and MIDI files with
+matching names. The versioned paired Python APIs accept MIDI containing
+multiple annotated instruments. The legacy batch CLI converts MIDI through a
+note-only intermediate representation, so it does not retain instrument or
+non-note event structure. The pair must already be aligned ground truth: this
+toolkit augments existing datasets; it does not create annotations from
+unlabelled audio.
 
 ```
 dataset/
@@ -42,10 +45,10 @@ dataset/
 - **Reverb & Filtering**: Room acoustics and frequency filtering effects
 - **Gain & Chorus**: Depth and richness enhancement
 - **Noise Augmentation**: Controlled noise addition for robustness training
-- **Fractional Detuning**: Sub-semitone audio detuning with unchanged symbolic
-  note labels
-- **Archival Noise**: Seeded 1/f-like recursive noise plus harmonic mains hum
-  at a measured aggregate RMS SNR
+- **Fractional Detuning**: Audio detuning by less than 50 cents with unchanged
+  symbolic note labels
+- **Archival Noise (opt-in)**: Configurable seeded 1/f-like noise and harmonic
+  mains hum for datasets whose target recordings have those characteristics
 - **Legacy Audio Merging**: Disabled by default because sources must be assigned
   to splits before any merge can be shown to be leakage-safe
 
@@ -60,40 +63,45 @@ dataset/
 
 ## Why AMT-Augmentor?
 
-Built for AMT, not just audio. Unlike general audio augmenters, AMT-Augmentor
-keeps paired audio and MIDI aligned by applying transform-consistent updates to
-the labels: pitch shift transposes MIDI, while time stretch maps every event by
-the realized output-sample ratio. The toolkit also provides MAESTRO-style CSV
-construction and split validation.
+Built for AMT, not just audio. Unlike general audio augmenters, the versioned
+paired APIs keep audio and MIDI aligned through transform-consistent label
+updates: pitch shift transposes pitched notes, while time-changing methods map
+note boundaries, control changes, pitch bends, and supported global timed
+events. The toolkit also provides MAESTRO-style CSV construction and split
+validation.
 
-## Deterministic conventional transforms
+## Deterministic paired transforms
 
-The supported research-facing API covers the toolbox's established
-conventional transformations: gain/chorus, target-SNR noise,
-reverb/filtering, integral pitch shift, and time stretch. The work here mainly
-makes the existing toolbox deterministic, synchronized with MIDI, validated,
-and provenance-tracked. Similar-sounding results are expected, not a failure;
-the scientific question is whether these controlled transforms improve model
-generalization.
+The versioned Python API provides deterministic paired implementations of
+gain/chorus, target-SNR noise, reverb and filtering, integral and fractional
+pitch changes, global time stretch, and local time variation. Each transform
+validates the audio--MIDI pair, records its parameters and synchronization
+checks, and publishes source-bound provenance. Useful strengths and parameter
+ranges depend on the instrument, recording conditions, annotation policy, and
+downstream model; no research recipe is enabled implicitly.
 
-Two opt-in audio-only APIs support successor studies without changing the
-frozen Galdr conventional campaign: `fractional_detuning_v1` shifts audio by
-strictly less than 50 cents and preserves MIDI bytes, while
-`archival_noise_v1` combines independent seeded 1/f-like recursive-noise and
-harmonic-hum streams at an exact pre-quantization aggregate RMS SNR. Its two
-deterministic passes use fixed 65,536-sample working blocks and one full-length
-output buffer rather than a whole-record FFT. The fixed recursive-filter
-coefficients carry a 44.1 kHz reference identity in provenance; the deliberately
-approximate 1/f-like spectrum contract is regression-tested at 8, 16, and
-44.1 kHz. Conservative initial screens should use detuning values `-30`,
-`-15`, `15`, and `30` cents, and archival-noise SNRs `24`, `28`, and `32` dB
-with the default 20% hum-power share, 50 Hz fundamental, and three harmonics.
+Several methods were refined while studying historical Hardanger fiddle
+recordings, but they are exposed as configurable AMT primitives rather than as
+a fiddle-specific pipeline:
 
-Further opt-in successor APIs separate reverb from filtering, materialize and
-verify complete integral pitch-shift grids, and create subtle local tempo
-variation. `local_time_warp_v1` preserves the recording duration and renders
-the complete recording once using a continuous monotonic time map; the same
-map is applied to MIDI event boundaries, with no chunk repetition or splicing.
+- `reverb_only_v1` separates room simulation from high-pass and low-pass
+  filtering so their effects can be evaluated independently.
+- `materialize_pitch_shift_grid_v1` renders and verifies an explicit,
+  caller-supplied integral pitch grid. Audio and MIDI are transposed together,
+  and callers may set narrower output pitch bounds for a particular model.
+  Drum tracks are rejected because General MIDI drum numbers identify kit
+  pieces rather than transposable pitches.
+- `fractional_detuning_v1` changes audio by less than half a semitone while
+  leaving symbolic MIDI pitches unchanged.
+- `archival_noise_v1` models configurable coloured noise and mains hum. It is
+  useful only when those conditions resemble the intended target domain.
+- `local_time_warp_v1` renders a complete recording once through a continuous,
+  monotonic time map and applies that exact map to MIDI event boundaries. It
+  does not cut, repeat, or splice chunks.
+
+These methods are opt-in. Their effect on transcription accuracy should be
+measured on held-out source groups for each dataset rather than assumed from
+another instrument or corpus.
 
 ```python
 from amt_augmentor import NoiseSNRParameters, noise_snr_v1
@@ -131,14 +139,35 @@ archival_noise_v1(
     "tune_archival.wav",
     "tune_archival.mid",
     seed=42,
-    parameters=ArchivalNoiseParameters(target_snr_db=28.0),
+    parameters=ArchivalNoiseParameters(
+        target_snr_db=28.0,
+        hum_power_fraction=0.20,
+        mains_frequency_hz=50.0,  # Use the value appropriate for the corpus.
+        harmonic_count=3,
+    ),
 )
 ```
 
-Each function requires explicit finite parameters and a nonnegative integer
-seed. It refuses to overwrite source or output files, validates the audio/MIDI
-pair (including note bounds), preserves channel count, and writes a JSON
-provenance sidecar with source/output hashes and the exact parameter plan.
+For an integral pitch study, pass the tested shifts explicitly rather than
+relying on a package-wide grid:
+
+```python
+from amt_augmentor import materialize_pitch_shift_grid_v1
+
+materialize_pitch_shift_grid_v1(
+    "tune.wav",
+    "tune.mid",
+    "pitch_grid",
+    seed=42,
+    semitones=(-2, -1, 1, 2),
+)
+```
+
+The research-facing functions require a nonnegative integer seed, validate all
+selected parameters, and record them in provenance. They refuse to overwrite
+source or output files, validate the audio/MIDI pair (including relevant note
+bounds), preserve channel count, and write a JSON sidecar containing source and
+output hashes plus the exact parameter plan.
 Time-stretched and pitch-shifted labels are serialized as high-resolution,
 constant-tempo AMT annotations; they are not intended as symbolic scores with
 an inherited tempo map.
@@ -148,15 +177,28 @@ staged first, the provenance sidecar is published last as the completion
 marker, and caught failures are rolled back. Consumers should only accept a
 bundle when the sidecar exists and its hashes match.
 
-Mixed-audio note removal, experimental synthetic pause insertion, and the
-former five-condition Galdr materializer were withdrawn after review and are
-not part of the package API. Their prototypes remain available through Git
+Mixed-audio note removal, experimental synthetic pause insertion, and an
+experiment-specific composite materializer were withdrawn after review and
+are not part of the package API. Their prototypes remain available through Git
 history only. The historical `add_pause` implementation is retained solely to
 reproduce old runs because the legacy CLI depends on it. It is disabled by
 default, omitted from the advertised effects, emits a visible warning when
 explicitly enabled, and must not be used for new training data. See
-[`docs/AUGMENTATION_SCOPE.md`](docs/AUGMENTATION_SCOPE.md) for the decision and
-current evaluation scope.
+[`docs/AUGMENTATION_SCOPE.md`](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/AUGMENTATION_SCOPE.md)
+for the decision and current evaluation scope.
+
+## Research case study
+
+A configuration evaluated on historical Hardanger fiddle recordings is
+described separately in the
+[Hardanger fiddle case study](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/HARDANGER_FIDDLE_CASE_STUDY.md).
+It supports
+the manuscript *Automatic Music Transcription for Oral Traditions: Methodology
+and a Hardanger Fiddle Case Study* (in preparation). The case study documents
+one corpus-specific use of the toolbox; it is neither a package default nor a
+claim that the same settings are optimal for other AMT datasets. The exact
+Galdr experiment manifests and training adapters belong with that research
+artifact, not in the general-purpose package API.
 
 ## Requirements
 
@@ -194,7 +236,12 @@ python -m amt_augmentor.main /path/to/dataset/directory
 
 
 
-This will process all compatible audio files in the directory and their corresponding MIDI files. The script automatically selects random parameters within predefined ranges for each augmentation type.
+This processes compatible audio files and their corresponding MIDI files using
+the legacy batch configuration. That workflow samples parameters from the YAML
+ranges; the deterministic paired Python APIs shown above instead use explicit,
+provenance-recorded settings. The legacy workflow flattens notes into a simple
+event annotation during processing, so use the paired Python APIs when MIDI
+instrument tracks, controls, or pitch bends must be retained.
 
 ### Advanced Usage
 
@@ -326,8 +373,8 @@ substring matching against the song stem. If the same title matches both lists,
 test wins and a warning is printed. Pinned songs are also **skipped at
 augmentation time** — no augmented WAVs/MIDIs are written for them — so
 held-out evaluation data stays untouched on disk and in the CSV. Substring
-matching means `--custom-test-songs "Spretten"` will pin every variant
-(`Spretten_original1`, `Spretten_angry`, `Spretten_sad`, ...) to the same
+matching means `--custom-test-songs "piece_17"` will pin every variant
+(`piece_17_take1`, `piece_17_take2`, `piece_17_studio`, ...) to the same
 split.
 
 ### Validating the Dataset Split

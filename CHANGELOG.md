@@ -2,180 +2,54 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
-## [2.0.0a8]
+## [2.0.0a8] - Unreleased
+
+The `2.0.0` alpha work is consolidated here because the earlier alpha numbers
+were development versions and were not published as PyPI releases.
 
 ### Added
-- `reverb_only_v1`, with explicit mild and aggressive FreeVerb preset grids,
-  so reverb can be evaluated independently of high-pass and low-pass filters.
-- `materialize_pitch_shift_grid_v1`, which renders a requested integral-shift
-  grid atomically, keeps every MIDI label synchronized, and verifies each
-  direction with non-wrapping absolute-frequency acoustic QC.
-- `local_time_warp_v1`, a deterministic, exact-duration local tempo variation
-  that applies one continuous phase-vocoder render and the same monotonic
-  sample map to every MIDI boundary without cutting, looping, or splicing.
+- Deterministic paired APIs for gain/chorus, measured target-SNR noise,
+  reverb/filtering, integral pitch shift, and realized-duration time stretch.
+- Configurable opt-in APIs for fractional detuning, archival-noise simulation,
+  reverb without filtering, complete caller-supplied pitch grids, and local
+  time variation.
+- Source-bound seeds, synchronized audio/MIDI transformations, strict parameter
+  validation, acoustic and symbolic QC, and JSON provenance containing source,
+  output, configuration, and tool identities.
+- Atomic no-overwrite publication of audio, MIDI, and provenance bundles, with
+  rollback on caught failures and the provenance sidecar published last as the
+  completion marker.
+- Standalone split validation for detecting source/derivative contamination and
+  orphaned augmented rows.
 
 ### Changed
-- The new methods are opt-in research APIs. The frozen Galdr conventional
-  campaign remains unchanged, allowing matched successor studies against the
-  previously materialized controls.
-
-## [2.0.0a7]
-
-### Added
-- `fractional_detuning_v1`, a deterministic audio-only detuning transform for
-  finite, nonzero shifts below half a semitone, with exact duration/channel
-  preservation and byte-identical MIDI.
-- `archival_noise_v1`, which combines independent seeded 1/f-like recursive
-  noise and seeded-phase harmonic mains hum at an exact aggregate pre-guard
-  RMS SNR. Its two-pass generator has fixed-size working blocks, one
-  full-length output buffer, and no whole-record FFT.
-- Provenance measurements for detuning ratio/backend and archival-noise RNG
-  streams, component orthogonalization, component power, phases, SNR, and the
-  canonical float64 interference hash. The fixed pink-filter coefficients are
-  identified with their 44.1 kHz reference rate and the 1/f-like contract is
-  regression-tested at 8, 16, and 44.1 kHz.
-- Acoustic and failure-path tests covering cents displacement, colored-noise
-  slope, harmonic-hum power, seed replay, stereo handling, invalid parameters,
-  no-overwrite publication, rollback, bounded generator blocks, and a
-  3,249,628-sample (73.688-second at 44.1 kHz) record.
-
-### Changed
-- The research-facing API now includes opt-in detuning and archival-noise
-  transforms. The frozen Galdr conventional O/C adapter remains unchanged and
-  does not include either new view.
-
-## [2.0.0a6]
-
-### Added
-- A deterministic Galdr O/C planner and materializer limited to original
-  recordings and the five established conventional transform families.
-- Training-only metadata, Galdr-compatible source lineage, derivative manifests,
-  condition identities, complete payload hashes, and an independent verifier.
-- Bounded parallel rendering whose media and provenance are invariant to worker
-  count.
-
-### Changed
-- The conventional parameter and seed stream reuses the established
-  `galdr-sigma2/conventional-stream/v1` identity so accepted earlier C media can
-  be checked for byte-level equivalence without restoring rejected methods.
-- Galdr source annotations are normalized in derivative MIDI files; canonical
-  audio and MIDI remain hash-checked and unchanged.
-
-## [2.0.0a5]
+- The research-facing transforms are general AMT primitives. Corpus-specific
+  recipes are explicit, opt-in configurations rather than package defaults.
+- Integral pitch transforms use the full legal MIDI range by default and allow
+  callers to supply narrower downstream-model bounds.
+- Audio-only transforms preserve arbitrary valid MIDI bytes; time transforms
+  map timed events across instruments, controls, and pitch bends; integral
+  pitch shift transposes pitched tracks and rejects ambiguous drum-track input.
+- Local time variation accepts a validated caller-supplied operating envelope
+  while retaining conservative defaults.
+- `convertfiles.standardize_audio` preserves every input channel and writes a
+  separate standardized WAV without replacing or deleting the source audio.
+- Linux excludes Pedalboard wheel releases known to trigger illegal-instruction
+  failures on some x86-64 runners; durable bundle publication now handles
+  Windows file and directory synchronization semantics.
+- Build metadata now uses an SPDX license expression and explicitly includes
+  the license file.
 
 ### Removed
-- Withdrawn mixed-audio note removal, synthetic pause insertion, and the
-  five-condition Galdr planner/materializer from the package API, source tree,
-  console entry points, tools, and active tests. The prototypes remain in Git
-  history for forensic review.
-
-### Changed
-- The supported research-facing surface now contains only deterministic,
-  synchronized, validated, and provenance-tracked versions of the established
-  conventional transforms.
-- Shared publication and MIDI-copying mechanics moved to the method-neutral
-  private module `amt_augmentor._paired_io`.
-- The rejected historical range masker remains disabled by default solely for
-  old-CLI reproduction, is no longer advertised as an effect, and emits a
-  visible runtime warning when explicitly enabled.
-
-### Fixed
-- `convertfiles.standardize_audio` now preserves every input channel and writes
-  a separate standardized WAV without replacing or deleting the source audio.
-- Conventional paired transforms now reject MIDI annotations whose note ends
-  extend beyond the duration of the paired audio.
-
-## [2.0.0a4]
-
-### Fixed
-- CD and CPD now branch from the same explicitly canonicalized post-DropNote
-  PCM16 signal. This prevents a floating-point value infinitesimally below a
-  negative PCM16 boundary from being encoded one least-significant bit
-  differently in the standalone and composed conditions.
-- PCM16 regression coverage now includes an adversarial value immediately
-  below a negative grid point and requires exact CPD-minus-Pause
-  reconstruction of CD across every conventional view.
-- The PCM16 helper is documented as the campaign's deterministic,
-  libsndfile-idempotent lattice projection rather than as an oracle for every
-  possible pre-serialization float.
-
-## [2.0.0a3]
-
-### Added
-- `pause_insert_v2`, which inserts deterministic guarded local room tone with
-  convex loop overlaps and boundary fades while retaining sample-exact
-  audio/MIDI time mapping.
-- A serialized-signal derivative gate over every outer join, complete boundary
-  fade, and complete loop overlap, with separate review and hard-failure
-  thresholds and per-transform report summaries.
-- A fail-closed pristine-audio calibration tool that pins its own script hash,
-  the plan, package source tree, Python/native runtime, and publishes mode-0640
-  JSON atomically without replacement.
-- Materialization report schema 2 bindings for every base/overlay provenance
-  path and SHA-256, plus condition and base-transform Pause QC quantiles.
-- Independent selection, duration, rendering, QC, conventional-transform, and
-  DropNote configuration streams so unrelated policy edits cannot change an
-  experiment arm's media.
-
-### Fixed
-- Pause donors now come from the actual inactive gap in each transformed MIDI
-  view, with every base-view note considered even when DropNote later masks it.
-- Pause QC is computed on the campaign's canonical PCM16 serialized/decoded
-  signal, not the pre-encoding float buffer. The native libsndfile version is
-  runtime pinned, non-PCM16 input fails closed, and clipping is rejected
-  before quantization.
-- Replay verification now includes provenance bytes as well as audio and MIDI.
-- CP/CPD use identical Pause samples, while CP reconstructs C exactly after
-  inserted spans are removed.
-
-## [2.0.0a2]
-
-### Added
-- Corrected, deterministic conventional APIs for gain/chorus, target-SNR
-  noise, reverb/filtering, integral pitch shift, and realized-duration time
-  stretch.
-- The Galdr Sigma 2 planner/materializer with paired `O`, `C`, `CP`, `CD`, and
-  `CPD` cells, fixed view slots, clean-provenance input binding, source-bound
-  seeds, no-replace publication, lineage manifests, MAESTRO-style metadata,
-  replay checks, and storage/work estimates.
-- A locked research dependency environment and operator protocol for building
-  Galdr training indexes and source-balanced exposure plans.
-
-### Changed
-- Conventional campaign transforms use immutable discrete parameter grids and
-  explicit output/provenance hashes instead of the historical batch CLI.
-
-## [2.0.0a1]
-
-### Added
-- `pause_insert_v1`, a deterministic paired audio/MIDI transform that inserts
-  exact silent samples only in globally inactive polyphonic gaps and shifts all
-  later labels by the same duration.
-- `drop_note_isolated_v1`, a conservative mixed-audio adaptation of symbolic
-  DropNote that only masks temporally isolated annotations, uses deterministic
-  local room tone/crossfades, and deletes exactly the matching MIDI notes.
-- Deterministic transform selection and JSON provenance sidecars containing
-  source/output hashes, policies, eligibility, selections, and invariants.
-- Tool-versioned provenance and a SHA-256 digest over a canonical,
-  source-bound transform plan/configuration.
-- Fail-closed bundle publication: same-directory staging, no overwrites,
-  rollback on caught failures, and provenance-sidecar-last completion marking.
-- Explicit `0640` collaboration-safe publication modes and destination
-  directory synchronization before and after the completion marker.
-- Strict seed and policy validation with no implicit type coercion.
-- Measured retained-note MIDI serialization error, bounded to half an output
-  MIDI tick plus numeric tolerance.
-- Explicit `.wav`/`.flac` audio and `.mid`/`.midi` annotation output
-  validation.
-- Unit tests for synchronization, global polyphonic occupancy, note counts,
-  unchanged audio outside transformed regions, same-seed byte equality,
-  crash-publication ordering, file modes, invalid seeds, suffixes, and
-  non-grid MIDI timing.
-
-### Changed
-- The historical `add_pause` implementation is now explicitly exposed as
-  `legacy_addpauses_unsafe`, disabled by default, and emits a deprecation
-  warning. It remains available only to reproduce prior experiments.
+- The Galdr-specific campaign adapter and command-line entry point. Exact study
+  manifests, grids, seeds, and training adapters belong with the research
+  artifact rather than the general-purpose toolbox.
+- Experimental mixed-audio note removal and synthetic pause insertion. Their
+  prototypes remain available in Git history, but neither is a supported AMT
+  augmentation method.
+- The historical range masker from the advertised effect list. It remains
+  disabled by default and emits a warning only when invoked explicitly for
+  reproduction of an old run.
 
 ## [1.2.2]
 

@@ -1,39 +1,40 @@
 # tests/test_main.py
 
-import os
-import random
 import string
-import pytest
+
 import pretty_midi
+import pytest
 
 # Import the functions to test from your main module
 from amt_augmentor.main import (
-    random_word,
-    generate_output_filename,
-    delete_file,
-    midi_to_ann,
     ann_to_midi,
     check_matching_files,
+    delete_file,
     filter_pinned_songs,
+    generate_output_filename,
+    midi_to_ann,
+    random_word,
 )
 
 
 def test_filter_pinned_songs_substring_match():
     """Custom-songs flags use case-insensitive substring matching: pinning
-    'Spretten' must drop Spretten_original1, Spretten_angry, Spretten_sad."""
+    'piece_17' must drop every related take."""
     audio_files = [
-        "Spretten_original1.wav",
-        "Spretten_angry.wav",
-        "Spretten_sad.wav",
-        "Vossarull_happy.wav",
-        "Valdresspringar_tender.wav",
+        "piece_17_take1.wav",
+        "piece_17_take2.wav",
+        "piece_17_studio.wav",
+        "piece_23_take1.wav",
+        "piece_42_take1.wav",
     ]
-    out = filter_pinned_songs(audio_files, ["Spretten"], ["Valdresspringar"])
-    assert sorted(out) == ["Vossarull_happy.wav"]
+    out = filter_pinned_songs(audio_files, ["piece_17"], ["piece_42"])
+    assert sorted(out) == ["piece_23_take1.wav"]
 
 
 def test_filter_pinned_songs_case_insensitive():
-    out = filter_pinned_songs(["FooBar.wav", "foobar_angry.wav", "Other.wav"], ["FOOBAR"], [])
+    out = filter_pinned_songs(
+        ["FooBar.wav", "foobar_angry.wav", "Other.wav"], ["FOOBAR"], []
+    )
     assert out == ["Other.wav"]
 
 
@@ -58,7 +59,9 @@ def test_generate_output_filename():
     measure = 1.2
     random_suffix = "abcde"
     extension = ".wav"
-    result = generate_output_filename(base_name, effect_name, measure, random_suffix, extension)
+    result = generate_output_filename(
+        base_name, effect_name, measure, random_suffix, extension
+    )
     expected = "audio_augmented_pitchshift_1.2_abcde.wav"
     assert result == expected
 
@@ -102,7 +105,7 @@ def test_midi_to_ann_and_ann_to_midi(tmp_path):
     ann_lines = ann_path.read_text().strip().splitlines()
     # Expect one line per note (we have one note)
     assert len(ann_lines) == 1
-    parts = ann_lines[0].split('\t')
+    parts = ann_lines[0].split("\t")
     assert len(parts) == 4
     onset, offset, pitch, velocity = parts
     # Check that values match what we wrote (formatted to 6 decimals)
@@ -134,10 +137,10 @@ def test_check_matching_files(tmp_path, caplog):
     with matching and non-matching files.
     """
     import logging
-    
+
     # Set up logging capture
     caplog.set_level(logging.WARNING)
-    
+
     # Create dummy files:
     # - A matching pair: song1.wav and song1.mid
     # - A WAV file with no matching MIDI: song2.wav
@@ -154,10 +157,13 @@ def test_check_matching_files(tmp_path, caplog):
     assert matches == 1
     assert wav_missing == 1
     assert mid_missing == 1
-    
-    # Verify log messages contain the expected content
-    assert any("No matching MIDI file for: song2.wav" in record.message 
-              for record in caplog.records)
-    assert any("No matching WAV file for: song3.mid" in record.message 
-              for record in caplog.records)
 
+    # Verify log messages contain the expected content
+    assert any(
+        "No matching MIDI file for: song2.wav" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "No matching WAV file for: song3.mid" in record.message
+        for record in caplog.records
+    )

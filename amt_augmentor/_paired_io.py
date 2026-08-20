@@ -12,7 +12,7 @@ import copy
 import hashlib
 import json
 import os
-import tempfile
+import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -23,7 +23,6 @@ import soundfile as sf
 PROVENANCE_SCHEMA_VERSION = 1
 ANNOTATION_MIDI_RESOLUTION = 9600
 ANNOTATION_MIDI_TEMPO = 120.0
-PUBLISHED_FILE_MODE = 0o640
 SUPPORTED_OUTPUT_AUDIO_SUFFIXES = {".flac", ".wav"}
 SUPPORTED_OUTPUT_MIDI_SUFFIXES = {".mid", ".midi"}
 
@@ -186,6 +185,18 @@ def _midi_timing_quantization_report(
     expected_midi: pretty_midi.PrettyMIDI,
 ) -> Dict[str, Any]:
     serialized_midi = pretty_midi.PrettyMIDI(str(serialized_midi_path))
+    if len(serialized_midi.instruments) != len(expected_midi.instruments):
+        raise RuntimeError("Serialized MIDI changed the retained instrument count")
+    for expected_instrument, serialized_instrument in zip(
+        expected_midi.instruments,
+        serialized_midi.instruments,
+    ):
+        if (
+            serialized_instrument.program != expected_instrument.program
+            or serialized_instrument.is_drum != expected_instrument.is_drum
+        ):
+            raise RuntimeError("Serialized MIDI changed retained instrument attributes")
+
     expected_notes = [
         (instrument.program, instrument.is_drum, note)
         for instrument in expected_midi.instruments
@@ -199,7 +210,7 @@ def _midi_timing_quantization_report(
     if len(serialized_notes) != len(expected_notes):
         raise RuntimeError("Serialized MIDI changed the retained note count")
 
-    errors: List[float] = []
+    note_errors: List[float] = []
     for expected, serialized in zip(expected_notes, serialized_notes):
         expected_program, expected_is_drum, expected_note = expected
         serialized_program, serialized_is_drum, serialized_note = serialized
@@ -210,28 +221,103 @@ def _midi_timing_quantization_report(
             or serialized_note.velocity != expected_note.velocity
         ):
             raise RuntimeError("Serialized MIDI changed retained note attributes")
-        errors.extend(
+        note_errors.extend(
             (
                 abs(float(serialized_note.start) - float(expected_note.start)),
                 abs(float(serialized_note.end) - float(expected_note.end)),
             )
         )
 
+    timed_event_errors: List[float] = []
+
+    def compare_timed_events(
+        expected_events,
+        serialized_events,
+        *,
+        label: str,
+        attributes: Sequence[str],
+    ) -> None:
+        expected_records = sorted(
+            tuple(getattr(event, attribute) for attribute in attributes)
+            + (float(event.time),)
+            for event in expected_events
+        )
+        serialized_records = sorted(
+            tuple(getattr(event, attribute) for attribute in attributes)
+            + (float(event.time),)
+            for event in serialized_events
+        )
+        if len(serialized_records) != len(expected_records):
+            raise RuntimeError(f"Serialized MIDI changed the retained {label} count")
+        for expected_record, serialized_record in zip(
+            expected_records,
+            serialized_records,
+        ):
+            if serialized_record[:-1] != expected_record[:-1]:
+                raise RuntimeError(
+                    f"Serialized MIDI changed retained {label} attributes"
+                )
+            timed_event_errors.append(
+                abs(serialized_record[-1] - expected_record[-1])
+            )
+
+    for instrument_index, (expected_instrument, serialized_instrument) in enumerate(
+        zip(expected_midi.instruments, serialized_midi.instruments)
+    ):
+        compare_timed_events(
+            expected_instrument.control_changes,
+            serialized_instrument.control_changes,
+            label=f"instrument {instrument_index} control-change",
+            attributes=("number", "value"),
+        )
+        compare_timed_events(
+            expected_instrument.pitch_bends,
+            serialized_instrument.pitch_bends,
+            label=f"instrument {instrument_index} pitch-bend",
+            attributes=("pitch",),
+        )
+
+    for attribute, label, event_attributes in (
+        ("key_signature_changes", "key-signature change", ("key_number",)),
+        (
+            "time_signature_changes",
+            "time-signature change",
+            ("numerator", "denominator"),
+        ),
+        ("lyrics", "lyric", ("text",)),
+        ("text_events", "text event", ("text",)),
+    ):
+        compare_timed_events(
+            getattr(expected_midi, attribute, []),
+            getattr(serialized_midi, attribute, []),
+            label=label,
+            attributes=event_attributes,
+        )
+
     tick_seconds = 60.0 / ANNOTATION_MIDI_TEMPO / ANNOTATION_MIDI_RESOLUTION
     half_tick_seconds = tick_seconds / 2.0
     numeric_tolerance_seconds = 1e-9
-    maximum_error_seconds = max(errors, default=0.0)
+    maximum_error_seconds = max(note_errors, default=0.0)
+    maximum_timed_event_error_seconds = max(timed_event_errors, default=0.0)
     maximum_allowed_seconds = half_tick_seconds + numeric_tolerance_seconds
     if maximum_error_seconds > maximum_allowed_seconds:
         raise RuntimeError(
             "Serialized retained-note endpoint error exceeds half an output "
             f"MIDI tick: {maximum_error_seconds} > {maximum_allowed_seconds}"
         )
+    if maximum_timed_event_error_seconds > maximum_allowed_seconds:
+        raise RuntimeError(
+            "Serialized retained timed-event error exceeds half an output "
+            "MIDI tick: "
+            f"{maximum_timed_event_error_seconds} > {maximum_allowed_seconds}"
+        )
     return {
         "comparison_basis": (
-            "expected transformed note endpoints before MIDI serialization"
+            "expected transformed note endpoints and timed events before MIDI "
+            "serialization"
         ),
-        "retained_note_endpoint_count": len(errors),
+        "retained_note_endpoint_count": len(note_errors),
+        "retained_timed_event_count": len(timed_event_errors),
         "output_midi_tick_seconds": tick_seconds,
         "bound_ticks": 0.5,
         "numeric_tolerance_seconds": numeric_tolerance_seconds,
@@ -240,6 +326,28 @@ def _midi_timing_quantization_report(
         "maximum_retained_note_endpoint_error_ticks": (
             maximum_error_seconds / tick_seconds
         ),
+        "maximum_retained_timed_event_error_seconds": (
+            maximum_timed_event_error_seconds
+        ),
+        "maximum_retained_timed_event_error_ticks": (
+            maximum_timed_event_error_seconds / tick_seconds
+        ),
+    }
+
+
+def _midi_byte_preservation_report(
+    serialized_midi_path: Path,
+    expected_midi_bytes: bytes,
+) -> Dict[str, Any]:
+    """Verify that an audio-only transform introduced no MIDI serialization."""
+
+    if serialized_midi_path.read_bytes() != expected_midi_bytes:
+        raise RuntimeError("Audio-only transform changed byte-preserved MIDI")
+    return {
+        "comparison_basis": "source and output MIDI byte identity",
+        "source_and_output_midi_bytes_identical": True,
+        "new_midi_serialization_applied": False,
+        "new_timing_quantization_applied": False,
     }
 
 
@@ -256,6 +364,91 @@ def _load_pair(
     info = sf.info(str(audio_path))
     midi = pretty_midi.PrettyMIDI(str(midi_path))
     return audio, int(sample_rate), info, midi
+
+
+def _validate_loaded_pair(
+    audio: np.ndarray,
+    sample_rate: int,
+    midi: pretty_midi.PrettyMIDI,
+    *,
+    reject_drum_tracks: bool = False,
+) -> None:
+    """Validate a general AMT audio/MIDI pair before transforming it.
+
+    Multiple instruments, control changes, pitch bends, drum tracks, and
+    global timed events are valid AMT annotations.  Pitch-changing callers can
+    set ``reject_drum_tracks`` because transposing General MIDI drum note
+    numbers changes instrument identity rather than musical pitch.
+    """
+
+    if audio.ndim != 2 or audio.shape[0] <= 0 or audio.shape[1] <= 0:
+        raise ValueError("audio must contain a non-empty samples-by-channels array")
+    if sample_rate <= 0:
+        raise ValueError("sample rate must be positive")
+    if not np.isfinite(audio).all():
+        raise ValueError("input audio contains NaN or infinite samples")
+
+    audio_duration = audio.shape[0] / sample_rate
+
+    def validate_time(value: Any, label: str) -> None:
+        time = float(value)
+        if not np.isfinite(time) or time < 0.0:
+            raise ValueError(f"{label} has an invalid time")
+        if time > audio_duration:
+            raise ValueError(
+                f"{label} occurs at {time:.9f} s, beyond the audio duration "
+                f"of {audio_duration:.9f} s"
+            )
+
+    note_count = 0
+    for instrument_index, instrument in enumerate(midi.instruments):
+        if reject_drum_tracks and instrument.is_drum:
+            raise ValueError(
+                "pitch-changing transforms do not support MIDI drum tracks"
+            )
+        for note_index, note in enumerate(instrument.notes):
+            note_count += 1
+            label = f"MIDI instrument {instrument_index} note {note_index}"
+            start = float(note.start)
+            end = float(note.end)
+            if (
+                not np.isfinite(start)
+                or not np.isfinite(end)
+                or start < 0.0
+                or end <= start
+            ):
+                raise ValueError(f"{label} has an invalid time interval")
+            if not 0 <= int(note.pitch) <= 127:
+                raise ValueError(f"{label} has an invalid pitch")
+            if not 1 <= int(note.velocity) <= 127:
+                raise ValueError(f"{label} has an invalid velocity")
+            if end > audio_duration:
+                raise ValueError(
+                    f"{label} ends at {end:.9f} s, beyond the audio duration "
+                    f"of {audio_duration:.9f} s"
+                )
+        for event_index, event in enumerate(instrument.control_changes):
+            validate_time(
+                event.time,
+                f"MIDI instrument {instrument_index} control change {event_index}",
+            )
+        for event_index, event in enumerate(instrument.pitch_bends):
+            validate_time(
+                event.time,
+                f"MIDI instrument {instrument_index} pitch bend {event_index}",
+            )
+
+    if note_count == 0:
+        raise ValueError("MIDI must contain at least one note")
+
+    for attribute, label in (
+        ("key_signature_changes", "key-signature change"),
+        ("time_signature_changes", "time-signature change"),
+        ("lyrics", "lyric"),
+        ("text_events", "text event"),
+    ):
+        for event_index, event in enumerate(getattr(midi, attribute, [])):
+            validate_time(event.time, f"MIDI {label} {event_index}")
 
 
 def _provenance_base(
@@ -283,11 +476,6 @@ def _provenance_base(
             "channels": int(audio.shape[1]),
             "midi_note_count": note_count,
         },
-        "midi_serialization": {
-            "purpose": "time-aligned AMT annotation",
-            "constant_tempo_bpm": ANNOTATION_MIDI_TEMPO,
-            "ticks_per_beat": ANNOTATION_MIDI_RESOLUTION,
-        },
     }
 
 
@@ -313,13 +501,21 @@ def _attach_plan_config(
 
 def _new_stage_path(target_path: Path) -> Path:
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, path = tempfile.mkstemp(
-        dir=str(target_path.parent),
-        prefix=f".{target_path.name}.staging-",
-        suffix=target_path.suffix,
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(100):
+        path = target_path.parent / (
+            f".{target_path.name}.staging-{secrets.token_hex(8)}"
+            f"{target_path.suffix}"
+        )
+        try:
+            descriptor = os.open(str(path), flags, 0o666)
+        except FileExistsError:
+            continue
+        os.close(descriptor)
+        return path
+    raise FileExistsError(
+        f"Unable to reserve a unique staging path beside {target_path}"
     )
-    os.close(descriptor)
-    return Path(path)
 
 
 def _write_provenance(path: Path, provenance: Dict[str, Any]) -> None:
@@ -368,10 +564,6 @@ def _fsync_directories(directories: Sequence[Path]) -> None:
         seen.add(resolved)
 
 
-def _set_published_mode(path: Path) -> None:
-    os.chmod(str(path), PUBLISHED_FILE_MODE)
-
-
 def _publish_stage(stage_path: Path, target_path: Path) -> None:
     """Publish without overwriting an output created by another process."""
 
@@ -416,15 +608,48 @@ def _stage_and_publish_bundle(
         _write_audio(stages[output_audio_path], output_audio, sample_rate, audio_info)
         if output_midi_bytes is None:
             _write_midi(stages[output_midi_path], output_midi)
+            provenance["midi_serialization"] = {
+                "mode": "rewritten_constant_tempo_annotation",
+                "purpose": "time-aligned AMT annotation",
+                "new_serialization_applied": True,
+                "constant_tempo_bpm": ANNOTATION_MIDI_TEMPO,
+                "ticks_per_beat": ANNOTATION_MIDI_RESOLUTION,
+            }
+            provenance["midi_timing_quantization"] = (
+                _midi_timing_quantization_report(
+                    stages[output_midi_path],
+                    output_midi,
+                )
+            )
         else:
+            expected_source_midi_sha256 = provenance.get("source", {}).get(
+                "midi_sha256"
+            )
+            if (
+                expected_source_midi_sha256 is None
+                or hashlib.sha256(output_midi_bytes).hexdigest()
+                != expected_source_midi_sha256
+            ):
+                raise RuntimeError(
+                    "Byte-preserved MIDI payload does not match the source MIDI"
+                )
             with stages[output_midi_path].open("wb") as handle:
                 handle.write(output_midi_bytes)
                 handle.flush()
                 os.fsync(handle.fileno())
-        provenance["midi_timing_quantization"] = _midi_timing_quantization_report(
-            stages[output_midi_path],
-            output_midi,
-        )
+            provenance["midi_serialization"] = {
+                "mode": "source_bytes_preserved",
+                "purpose": "time-aligned AMT annotation",
+                "new_serialization_applied": False,
+                "source_ticks_per_beat": int(output_midi.resolution),
+                "source_tempo_map_preserved_byte_for_byte": True,
+            }
+            provenance["midi_timing_quantization"] = (
+                _midi_byte_preservation_report(
+                    stages[output_midi_path],
+                    output_midi_bytes,
+                )
+            )
 
         output_note_count = sum(
             len(instrument.notes) for instrument in output_midi.instruments
@@ -444,15 +669,14 @@ def _stage_and_publish_bundle(
                 "sidecar exists and its hashes match."
             ),
             "publish_order": ["audio", "midi", "provenance"],
-            "file_mode_octal": "0640",
-            "file_mode_rationale": (
-                "Owner read/write and group read access; no world access."
+            "file_mode_policy": (
+                "regular files are created with mode 0666 filtered by the "
+                "caller's process umask"
             ),
         }
         _write_provenance(stages[provenance_path], provenance)
 
         for stage in stages.values():
-            _set_published_mode(stage)
             _fsync_path(stage)
 
         for target in (output_audio_path, output_midi_path):

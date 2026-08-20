@@ -34,7 +34,7 @@ def _write_pair(root: Path, *, seconds: float = 10.0, sample_rate: int = 8000):
     sf.write(audio_path, audio, sample_rate, subtype="PCM_16")
 
     midi = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=9600)
-    instrument = pretty_midi.Instrument(program=0, name="piano")
+    instrument = pretty_midi.Instrument(program=0, name="instrument_1")
     instrument.notes.extend(
         [
             pretty_midi.Note(velocity=90, pitch=57, start=0.75, end=2.0),
@@ -42,7 +42,23 @@ def _write_pair(root: Path, *, seconds: float = 10.0, sample_rate: int = 8000):
             pretty_midi.Note(velocity=90, pitch=64, start=6.1, end=9.5),
         ]
     )
-    midi.instruments.append(instrument)
+    instrument.control_changes.append(
+        pretty_midi.ControlChange(number=64, value=127, time=2.5)
+    )
+    instrument.pitch_bends.append(pretty_midi.PitchBend(pitch=320, time=4.5))
+    second = pretty_midi.Instrument(program=40, name="instrument_2")
+    second.notes.append(
+        pretty_midi.Note(velocity=76, pitch=69, start=1.1, end=7.2)
+    )
+    second.control_changes.append(
+        pretty_midi.ControlChange(number=1, value=70, time=5.5)
+    )
+    second.pitch_bends.append(pretty_midi.PitchBend(pitch=-256, time=6.0))
+    midi.instruments.extend((instrument, second))
+    midi.key_signature_changes.append(pretty_midi.KeySignature(0, 0.2))
+    midi.time_signature_changes.append(pretty_midi.TimeSignature(4, 4, 0.3))
+    midi.lyrics.append(pretty_midi.Lyric("syllable", 3.0))
+    midi.text_events.append(pretty_midi.Text("section", 5.0))
     midi_path = root / "source.mid"
     midi.write(str(midi_path))
     return audio_path, midi_path, sample_count, sample_rate
@@ -55,6 +71,36 @@ def _notes(path: Path):
         for instrument in midi.instruments
         for note in instrument.notes
     ]
+
+
+def _timed_events(path: Path):
+    midi = pretty_midi.PrettyMIDI(str(path))
+    events = []
+    for instrument_index, instrument in enumerate(midi.instruments):
+        events.extend(
+            ("control_change", instrument_index, event.number, event.value, event.time)
+            for event in instrument.control_changes
+        )
+        events.extend(
+            ("pitch_bend", instrument_index, event.pitch, event.time)
+            for event in instrument.pitch_bends
+        )
+    events.extend(
+        ("key_signature", event.key_number, event.time)
+        for event in midi.key_signature_changes
+    )
+    events.extend(
+        (
+            "time_signature",
+            event.numerator,
+            event.denominator,
+            event.time,
+        )
+        for event in midi.time_signature_changes
+    )
+    events.extend(("lyric", event.text, event.time) for event in midi.lyrics)
+    events.extend(("text", event.text, event.time) for event in midi.text_events)
+    return events
 
 
 def _write_impulse_pair(root: Path, *, sample_rate: int = 8000):
@@ -167,6 +213,23 @@ def test_local_time_warp_maps_every_midi_boundary_through_published_sample_map(
             )
             assert output_time == pytest.approx(expected, abs=0.0001)
         assert output_note[2:] == source_note[2:]
+    source_events = _timed_events(source_midi)
+    output_events = _timed_events(output_midi)
+    assert len(output_events) == len(source_events)
+    for source_event, output_event in zip(source_events, output_events):
+        expected = (
+            np.interp(
+                source_event[-1] * sample_rate,
+                source_knots,
+                target_knots,
+            )
+            / sample_rate
+        )
+        assert output_event[:-1] == source_event[:-1]
+        assert output_event[-1] == pytest.approx(expected, abs=0.0001)
+    assert provenance["midi_timing_quantization"]["retained_timed_event_count"] == len(
+        source_events
+    )
 
 
 def test_local_time_warp_has_no_repeated_chunks_or_silent_dropouts(tmp_path):
@@ -230,3 +293,107 @@ def test_local_time_warp_preserves_tone_pitch_and_keeps_impulses_approximately_a
         start = max(0, expected - radius)
         stop = min(impulses.size, expected + radius)
         assert np.max(np.abs(impulses[start:stop])) > 1e-4
+
+
+def test_two_nondefault_safe_profiles_drive_distinct_sample_maps(tmp_path):
+    source_audio, source_midi, _, sample_rate = _write_pair(tmp_path / "source")
+    profiles = (
+        LocalTimeWarpParameters(
+            minimum_rate=0.90,
+            maximum_rate=1.08,
+            anchor_seconds=1.0,
+            correlation_seconds=4.0,
+            n_fft=1024,
+            hop_length=256,
+        ),
+        LocalTimeWarpParameters(
+            minimum_rate=0.97,
+            maximum_rate=1.12,
+            anchor_seconds=0.5,
+            correlation_seconds=2.0,
+            n_fft=512,
+            hop_length=128,
+        ),
+    )
+    provenances = []
+    for index, profile in enumerate(profiles):
+        provenance = local_time_warp_v1(
+            source_audio,
+            source_midi,
+            tmp_path / f"profile-{index}.wav",
+            tmp_path / f"profile-{index}.mid",
+            seed=321,
+            parameters=profile,
+        )
+        provenances.append(provenance)
+        sample_map = provenance["sample_map"]
+        rates = np.asarray(
+            sample_map["segment_target_per_source_rates"],
+            dtype=np.float64,
+        )
+        assert np.min(rates) >= profile.minimum_rate - 1e-12
+        assert np.max(rates) <= profile.maximum_rate + 1e-12
+        assert sample_map["configured_minimum_rate"] == profile.minimum_rate
+        assert sample_map["configured_maximum_rate"] == profile.maximum_rate
+        assert sample_map["anchor_seconds"] == profile.anchor_seconds
+        assert sample_map["correlation_seconds"] == profile.correlation_seconds
+        assert sample_map["variation_applied"] is True
+        assert provenance["backend"]["n_fft"] == profile.n_fft
+        assert provenance["backend"]["hop_length"] == profile.hop_length
+        expected_stride = round(profile.anchor_seconds * sample_rate)
+        source_knots = np.asarray(sample_map["source_sample_knots"])
+        assert np.all(np.diff(source_knots)[:-1] == expected_stride)
+
+    assert (
+        provenances[0]["sample_map"]["source_sample_knots"]
+        != provenances[1]["sample_map"]["source_sample_knots"]
+    )
+    assert (
+        provenances[0]["sample_map"]["target_sample_knots"]
+        != provenances[1]["sample_map"]["target_sample_knots"]
+    )
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        LocalTimeWarpParameters(minimum_rate=0.49),
+        LocalTimeWarpParameters(maximum_rate=2.01),
+        LocalTimeWarpParameters(anchor_seconds=0.09),
+        LocalTimeWarpParameters(anchor_seconds=2.0, correlation_seconds=1.0),
+        LocalTimeWarpParameters(n_fft=1000),
+        LocalTimeWarpParameters(n_fft=1024, hop_length=300),
+    ],
+)
+def test_local_time_warp_rejects_profiles_outside_safe_ranges(
+    tmp_path,
+    parameters,
+):
+    source_audio, source_midi, _, _ = _write_pair(tmp_path / "source")
+    with pytest.raises(ValueError):
+        local_time_warp_v1(
+            source_audio,
+            source_midi,
+            tmp_path / "output.wav",
+            tmp_path / "output.mid",
+            seed=1,
+            parameters=parameters,
+        )
+    assert not (tmp_path / "output.wav").exists()
+
+
+def test_profile_that_cannot_create_nonidentity_map_fails_clearly(tmp_path):
+    source_audio, source_midi, _, _ = _write_pair(tmp_path / "source")
+    with pytest.raises(ValueError, match="at least four anchor segments"):
+        local_time_warp_v1(
+            source_audio,
+            source_midi,
+            tmp_path / "output.wav",
+            tmp_path / "output.mid",
+            seed=1,
+            parameters=LocalTimeWarpParameters(
+                anchor_seconds=4.0,
+                correlation_seconds=8.0,
+            ),
+        )
+    assert not (tmp_path / "output.wav").exists()

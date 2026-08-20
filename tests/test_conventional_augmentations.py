@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +13,6 @@ import soundfile as sf
 
 import amt_augmentor._paired_io as paired_io
 from amt_augmentor.conventional_augmentations import (
-    AGGRESSIVE_REVERB_ONLY_PRESETS_V1,
-    MILD_REVERB_ONLY_PRESETS_V1,
     GainChorusParameters,
     NoiseSNRParameters,
     PitchShiftParameters,
@@ -48,7 +48,7 @@ def _write_pair(
     )
     sf.write(audio_path, audio, sample_rate, subtype="PCM_16")
     midi = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=9600)
-    instrument = pretty_midi.Instrument(program=40, name="fiddle")
+    instrument = pretty_midi.Instrument(program=40, name="lead_strings")
     for index, pitch in enumerate(pitches):
         start = 0.15 + 0.50 * index
         instrument.notes.append(
@@ -71,6 +71,36 @@ def _notes(path: Path):
         for instrument in midi.instruments
         for note in instrument.notes
     ]
+
+
+def _timed_events(path: Path):
+    midi = pretty_midi.PrettyMIDI(str(path))
+    events = []
+    for instrument_index, instrument in enumerate(midi.instruments):
+        events.extend(
+            ("control_change", instrument_index, event.number, event.value, event.time)
+            for event in instrument.control_changes
+        )
+        events.extend(
+            ("pitch_bend", instrument_index, event.pitch, event.time)
+            for event in instrument.pitch_bends
+        )
+    events.extend(
+        ("key_signature", event.key_number, event.time)
+        for event in midi.key_signature_changes
+    )
+    events.extend(
+        (
+            "time_signature",
+            event.numerator,
+            event.denominator,
+            event.time,
+        )
+        for event in midi.time_signature_changes
+    )
+    events.extend(("lyric", event.text, event.time) for event in midi.lyrics)
+    events.extend(("text", event.text, event.time) for event in midi.text_events)
+    return events
 
 
 @pytest.mark.parametrize(
@@ -165,48 +195,71 @@ def test_noise_has_seeded_measured_snr_without_opaque_normalization(tmp_path):
     assert provenances[0]["plan_config_sha256"] == provenances[1]["plan_config_sha256"]
 
 
-def test_reverb_only_presets_are_explicit_ordered_and_filter_free(tmp_path):
-    assert len(MILD_REVERB_ONLY_PRESETS_V1) == 4
-    assert len(AGGRESSIVE_REVERB_ONLY_PRESETS_V1) == 4
-    assert max(item.room_size for item in MILD_REVERB_ONLY_PRESETS_V1) < min(
-        item.room_size for item in AGGRESSIVE_REVERB_ONLY_PRESETS_V1
+def test_reverb_only_uses_explicit_caller_profiles_and_no_filters(tmp_path):
+    subtle = ReverbOnlyParameters(
+        room_size=0.20,
+        wet_level=0.12,
+        dry_level=0.88,
+        damping=0.45,
+        width=0.90,
+        freeze_mode=0.0,
     )
-    assert max(item.wet_level for item in MILD_REVERB_ONLY_PRESETS_V1) < min(
-        item.wet_level for item in AGGRESSIVE_REVERB_ONLY_PRESETS_V1
+    spacious = ReverbOnlyParameters(
+        room_size=0.72,
+        wet_level=0.38,
+        dry_level=0.62,
+        damping=0.60,
+        width=1.0,
+        freeze_mode=0.0,
     )
-    for item in MILD_REVERB_ONLY_PRESETS_V1 + AGGRESSIVE_REVERB_ONLY_PRESETS_V1:
-        assert item.wet_level + item.dry_level == pytest.approx(1.0)
-        assert item.damping == 0.5
-        assert item.width == 1.0
-        assert item.freeze_mode == 0.0
-
     source_audio, source_midi = _write_pair(tmp_path)
-    mild_provenance = reverb_only_v1(
+    subtle_provenance = reverb_only_v1(
         source_audio,
         source_midi,
-        tmp_path / "reverb-mild.wav",
-        tmp_path / "reverb-mild.mid",
+        tmp_path / "reverb-subtle.wav",
+        tmp_path / "reverb-subtle.mid",
         seed=99,
-        parameters=MILD_REVERB_ONLY_PRESETS_V1[0],
+        parameters=subtle,
     )
     provenance = reverb_only_v1(
         source_audio,
         source_midi,
-        tmp_path / "reverb-aggressive.wav",
-        tmp_path / "reverb-aggressive.mid",
+        tmp_path / "reverb-spacious.wav",
+        tmp_path / "reverb-spacious.mid",
         seed=99,
-        parameters=AGGRESSIVE_REVERB_ONLY_PRESETS_V1[-1],
+        parameters=spacious,
     )
     assert provenance["qc"]["effect_chain"] == ["pedalboard.Reverb"]
     assert provenance["qc"]["highpass_filter_applied"] is False
     assert provenance["qc"]["lowpass_filter_applied"] is False
     assert provenance["qc"]["all_reverb_parameters_explicit"] is True
     assert provenance["qc"]["residual_to_source_rms_ratio"] > 0.0
-    assert mild_provenance["qc"]["residual_to_source_rms_ratio"] > 0.0
+    assert subtle_provenance["qc"]["residual_to_source_rms_ratio"] > 0.0
+    assert provenance["parameters"] == {
+        "room_size": 0.72,
+        "wet_level": 0.38,
+        "dry_level": 0.62,
+        "damping": 0.60,
+        "width": 1.0,
+        "freeze_mode": 0.0,
+    }
 
 
 def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
     source_audio, source_midi = _write_pair(tmp_path)
+    midi = pretty_midi.PrettyMIDI(str(source_midi))
+    midi.instruments[0].control_changes.append(
+        pretty_midi.ControlChange(number=1, value=80, time=0.2)
+    )
+    midi.instruments[0].pitch_bends.append(
+        pretty_midi.PitchBend(pitch=-256, time=0.4)
+    )
+    second = pretty_midi.Instrument(program=12, name="instrument_2")
+    second.notes.append(
+        pretty_midi.Note(velocity=78, pitch=72, start=0.35, end=0.70)
+    )
+    midi.instruments.append(second)
+    midi.write(str(source_midi))
     output_audio = tmp_path / "pitch.wav"
     output_midi = tmp_path / "pitch.mid"
     provenance = pitch_shift_v1(
@@ -227,8 +280,33 @@ def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
         assert output[2] == source[2] + 2
         assert output[3] == source[3]
     assert provenance["qc"]["out_of_range_labels_dropped"] == 0
+    assert provenance["parameters"]["minimum_midi_pitch"] == 0
+    assert provenance["parameters"]["maximum_midi_pitch"] == 127
+    assert provenance["midi_serialization"] == {
+        "mode": "rewritten_constant_tempo_annotation",
+        "purpose": "time-aligned AMT annotation",
+        "new_serialization_applied": True,
+        "constant_tempo_bpm": paired_io.ANNOTATION_MIDI_TEMPO,
+        "ticks_per_beat": paired_io.ANNOTATION_MIDI_RESOLUTION,
+    }
+    assert provenance["midi_timing_quantization"][
+        "output_midi_tick_seconds"
+    ] == pytest.approx(
+        60.0
+        / paired_io.ANNOTATION_MIDI_TEMPO
+        / paired_io.ANNOTATION_MIDI_RESOLUTION
+    )
+    source_events = _timed_events(source_midi)
+    output_events = _timed_events(output_midi)
+    assert len(output_events) == len(source_events)
+    for source_event, output_event in zip(source_events, output_events):
+        assert output_event[:-1] == source_event[:-1]
+        assert output_event[-1] == pytest.approx(source_event[-1], abs=0.0001)
+    assert provenance["midi_timing_quantization"]["retained_timed_event_count"] == len(
+        source_events
+    )
 
-    edge_audio, edge_midi = _write_pair(tmp_path / "edge", pitches=(107,))
+    edge_audio, edge_midi = _write_pair(tmp_path / "edge", pitches=(126,))
     with pytest.raises(ValueError, match="refuses to drop labels"):
         pitch_shift_v1(
             edge_audio,
@@ -241,8 +319,48 @@ def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
     assert not (tmp_path / "bad.wav").exists()
 
 
+def test_pitch_shift_rejects_drum_tracks_without_rejecting_other_instruments(
+    tmp_path,
+):
+    source_audio, source_midi = _write_pair(tmp_path)
+    midi = pretty_midi.PrettyMIDI(str(source_midi))
+    drum = pretty_midi.Instrument(program=0, is_drum=True, name="percussion")
+    drum.notes.append(
+        pretty_midi.Note(velocity=90, pitch=38, start=0.2, end=0.3)
+    )
+    midi.instruments.append(drum)
+    midi.write(str(source_midi))
+
+    with pytest.raises(ValueError, match="drum tracks"):
+        pitch_shift_v1(
+            source_audio,
+            source_midi,
+            tmp_path / "output.wav",
+            tmp_path / "output.mid",
+            seed=2,
+            parameters=PitchShiftParameters(semitones=1),
+        )
+
+
 def test_time_stretch_uses_realized_sample_ratio_for_every_note_boundary(tmp_path):
     source_audio, source_midi = _write_pair(tmp_path, seconds=1.333375)
+    midi = pretty_midi.PrettyMIDI(str(source_midi))
+    midi.instruments[0].control_changes.append(
+        pretty_midi.ControlChange(number=64, value=127, time=0.25)
+    )
+    midi.instruments[0].pitch_bends.append(
+        pretty_midi.PitchBend(pitch=384, time=0.45)
+    )
+    second = pretty_midi.Instrument(program=12, name="instrument_2")
+    second.notes.append(
+        pretty_midi.Note(velocity=70, pitch=74, start=0.20, end=0.55)
+    )
+    midi.instruments.append(second)
+    midi.key_signature_changes.append(pretty_midi.KeySignature(2, 0.10))
+    midi.time_signature_changes.append(pretty_midi.TimeSignature(3, 4, 0.12))
+    midi.lyrics.append(pretty_midi.Lyric("syllable", 0.30))
+    midi.text_events.append(pretty_midi.Text("section", 0.40))
+    midi.write(str(source_midi))
     output_audio = tmp_path / "stretch.wav"
     output_midi = tmp_path / "stretch.mid"
     provenance = time_stretch_v1(
@@ -265,6 +383,18 @@ def test_time_stretch_uses_realized_sample_ratio_for_every_note_boundary(tmp_pat
         assert output[0] == pytest.approx(source[0] * realized, abs=0.0001)
         assert output[1] == pytest.approx(source[1] * realized, abs=0.0001)
         assert output[2:] == source[2:]
+    source_events = _timed_events(source_midi)
+    output_events = _timed_events(output_midi)
+    assert len(output_events) == len(source_events)
+    for source_event, output_event in zip(source_events, output_events):
+        assert output_event[:-1] == source_event[:-1]
+        assert output_event[-1] == pytest.approx(
+            source_event[-1] * realized,
+            abs=0.0001,
+        )
+    assert provenance["midi_timing_quantization"]["retained_timed_event_count"] == len(
+        source_events
+    )
 
 
 @pytest.mark.parametrize(
@@ -309,22 +439,78 @@ def test_invalid_parameters_fail_before_publishing(tmp_path, function, parameter
     assert not (tmp_path / "output.mid").exists()
 
 
-def test_malformed_campaign_midi_is_an_error_not_a_silent_drop(tmp_path):
+def test_audio_only_transforms_accept_general_multi_instrument_midi(tmp_path):
     source_audio, source_midi = _write_pair(tmp_path)
     midi = pretty_midi.PrettyMIDI(str(source_midi))
     midi.instruments[0].control_changes.append(
         pretty_midi.ControlChange(number=64, value=127, time=0.2)
     )
+    midi.instruments[0].pitch_bends.append(
+        pretty_midi.PitchBend(pitch=512, time=0.3)
+    )
+    second = pretty_midi.Instrument(program=12, name="instrument_2")
+    second.notes.append(
+        pretty_midi.Note(velocity=76, pitch=72, start=0.4, end=0.8)
+    )
+    drum = pretty_midi.Instrument(program=0, is_drum=True, name="percussion")
+    drum.notes.append(
+        pretty_midi.Note(velocity=80, pitch=36, start=0.5, end=0.6)
+    )
+    midi.instruments.extend((second, drum))
     midi.write(str(source_midi))
-    with pytest.raises(ValueError, match="control changes"):
-        noise_snr_v1(
-            source_audio,
-            source_midi,
-            tmp_path / "output.wav",
-            tmp_path / "output.mid",
-            seed=1,
-            parameters=NoiseSNRParameters(target_snr_db=20.0),
-        )
+    source_bytes = source_midi.read_bytes()
+    noise_snr_v1(
+        source_audio,
+        source_midi,
+        tmp_path / "output.wav",
+        tmp_path / "output.mid",
+        seed=1,
+        parameters=NoiseSNRParameters(target_snr_db=20.0),
+    )
+    assert (tmp_path / "output.mid").read_bytes() == source_bytes
+
+
+def test_audio_only_provenance_reports_source_midi_bytes_without_new_quantization(
+    tmp_path,
+):
+    source_audio, source_midi = _write_pair(tmp_path)
+    source = pretty_midi.PrettyMIDI(initial_tempo=60.0, resolution=480)
+    instrument = pretty_midi.Instrument(program=12, name="instrument_1")
+    instrument.notes.append(
+        pretty_midi.Note(velocity=80, pitch=69, start=0.125, end=0.75)
+    )
+    source.instruments.append(instrument)
+    source.write(str(source_midi))
+    source_bytes = source_midi.read_bytes()
+    parsed_source = pretty_midi.PrettyMIDI(str(source_midi))
+    assert parsed_source.resolution == 480
+    assert parsed_source.get_tempo_changes()[1] == pytest.approx([60.0])
+
+    provenance = noise_snr_v1(
+        source_audio,
+        source_midi,
+        tmp_path / "output.wav",
+        tmp_path / "output.mid",
+        seed=17,
+        parameters=NoiseSNRParameters(target_snr_db=20.0),
+    )
+
+    assert (tmp_path / "output.mid").read_bytes() == source_bytes
+    assert provenance["midi_serialization"] == {
+        "mode": "source_bytes_preserved",
+        "purpose": "time-aligned AMT annotation",
+        "new_serialization_applied": False,
+        "source_ticks_per_beat": 480,
+        "source_tempo_map_preserved_byte_for_byte": True,
+    }
+    quantization = provenance["midi_timing_quantization"]
+    assert quantization == {
+        "comparison_basis": "source and output MIDI byte identity",
+        "source_and_output_midi_bytes_identical": True,
+        "new_midi_serialization_applied": False,
+        "new_timing_quantization_applied": False,
+    }
+    assert "output_midi_tick_seconds" not in quantization
 
 
 def test_midi_note_beyond_audio_duration_fails_before_publishing(tmp_path):
@@ -462,3 +648,29 @@ def test_conventional_api_rejects_invalid_seeds(
 
     assert not (tmp_path / "output.wav").exists()
     assert not (tmp_path / "output.mid").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX umask/mode semantics")
+def test_paired_bundle_publication_respects_caller_umask(tmp_path):
+    source_audio, source_midi = _write_pair(tmp_path / "source")
+    output_audio = tmp_path / "output.wav"
+    output_midi = tmp_path / "output.mid"
+    provenance_path = output_audio.with_suffix(".wav.provenance.json")
+    previous_umask = os.umask(0o077)
+    try:
+        provenance = noise_snr_v1(
+            source_audio,
+            source_midi,
+            output_audio,
+            output_midi,
+            seed=1,
+            parameters=NoiseSNRParameters(target_snr_db=20.0),
+        )
+    finally:
+        os.umask(previous_umask)
+
+    for path in (output_audio, output_midi, provenance_path):
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert "caller\'s process umask" in provenance["publication"][
+        "file_mode_policy"
+    ]

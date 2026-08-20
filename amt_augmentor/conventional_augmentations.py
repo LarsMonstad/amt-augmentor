@@ -21,8 +21,9 @@ duration ratio, rather than rounding annotation text or assuming that the
 nominal playback rate can be represented exactly in samples.
 
 The opt-in ``fractional_detuning_v1``, ``archival_noise_v1``, and
-``reverb_only_v1`` APIs are audio-only successor transforms. They intentionally
-are not wired into the frozen Galdr conventional campaign adapter.
+``reverb_only_v1`` APIs are audio-only transforms for explicitly planned AMT
+experiments.  Corpus-specific parameter grids are intentionally left to each
+caller rather than embedded as toolbox defaults.
 """
 
 from __future__ import annotations
@@ -53,13 +54,14 @@ from amt_augmentor._paired_io import (
     _load_pair,
     _provenance_base,
     _stage_and_publish_bundle,
+    _validate_loaded_pair,
     _validate_output_paths,
     _validate_seed,
 )
 
 PEAK_LIMIT = 0.999
-MODEL_MINIMUM_MIDI_PITCH = 21
-MODEL_MAXIMUM_MIDI_PITCH = 108
+MIDI_MINIMUM_PITCH = 0
+MIDI_MAXIMUM_PITCH = 127
 MAXIMUM_HUM_HARMONICS = 16
 ARCHIVAL_NOISE_BLOCK_SAMPLES = 65536
 PINK_FILTER_WARMUP_SAMPLES = 16384
@@ -106,12 +108,12 @@ class NoiseSNRParameters:
 
 @dataclass(frozen=True)
 class ArchivalNoiseParameters:
-    """Target SNR and finite-record pink-noise/harmonic-hum power mix."""
+    """Explicit corpus profile for pink-noise and harmonic-hum simulation."""
 
     target_snr_db: float
-    hum_power_fraction: float = 0.20
-    mains_frequency_hz: float = 50.0
-    harmonic_count: int = 3
+    hum_power_fraction: float
+    mains_frequency_hz: float
+    harmonic_count: int
 
 
 @dataclass(frozen=True)
@@ -137,30 +139,13 @@ class ReverbOnlyParameters:
     freeze_mode: float = 0.0
 
 
-# Each preset keeps wet_level + dry_level equal to one.  These are research
-# grids, not defaults applied implicitly by reverb_only_v1.
-MILD_REVERB_ONLY_PRESETS_V1 = (
-    ReverbOnlyParameters(room_size=0.15, wet_level=0.10, dry_level=0.90),
-    ReverbOnlyParameters(room_size=0.25, wet_level=0.15, dry_level=0.85),
-    ReverbOnlyParameters(room_size=0.35, wet_level=0.20, dry_level=0.80),
-    ReverbOnlyParameters(room_size=0.45, wet_level=0.25, dry_level=0.75),
-)
-
-AGGRESSIVE_REVERB_ONLY_PRESETS_V1 = (
-    ReverbOnlyParameters(room_size=0.55, wet_level=0.30, dry_level=0.70),
-    ReverbOnlyParameters(room_size=0.65, wet_level=0.35, dry_level=0.65),
-    ReverbOnlyParameters(room_size=0.75, wet_level=0.40, dry_level=0.60),
-    ReverbOnlyParameters(room_size=0.85, wet_level=0.45, dry_level=0.55),
-)
-
-
 @dataclass(frozen=True)
 class PitchShiftParameters:
     """Parameters for :func:`pitch_shift_v1`."""
 
     semitones: int
-    minimum_midi_pitch: int = MODEL_MINIMUM_MIDI_PITCH
-    maximum_midi_pitch: int = MODEL_MAXIMUM_MIDI_PITCH
+    minimum_midi_pitch: int = MIDI_MINIMUM_PITCH
+    maximum_midi_pitch: int = MIDI_MAXIMUM_PITCH
 
 
 @dataclass(frozen=True)
@@ -308,48 +293,6 @@ def _validate_time_stretch(parameters: TimeStretchParameters) -> None:
         4.0,
         inclusive_minimum=True,
     )
-
-
-def _validate_loaded_pair(
-    audio: np.ndarray,
-    sample_rate: int,
-    midi: pretty_midi.PrettyMIDI,
-) -> None:
-    if audio.ndim != 2 or audio.shape[0] <= 0 or audio.shape[1] <= 0:
-        raise ValueError("audio must contain a non-empty samples-by-channels array")
-    if sample_rate <= 0:
-        raise ValueError("sample rate must be positive")
-    if not np.isfinite(audio).all():
-        raise ValueError("input audio contains NaN or infinite samples")
-    if len(midi.instruments) != 1:
-        raise ValueError("MIDI must contain exactly one instrument")
-    instrument = midi.instruments[0]
-    if instrument.is_drum:
-        raise ValueError("MIDI instrument must not be a drum track")
-    if instrument.control_changes:
-        raise ValueError("MIDI control changes are not supported by these transforms")
-    if instrument.pitch_bends:
-        raise ValueError("MIDI pitch bends are not supported by these transforms")
-    if not instrument.notes:
-        raise ValueError("MIDI must contain at least one note")
-    audio_duration = audio.shape[0] / sample_rate
-    for index, note in enumerate(instrument.notes):
-        if (
-            not math.isfinite(float(note.start))
-            or not math.isfinite(float(note.end))
-            or note.start < 0
-            or note.end <= note.start
-        ):
-            raise ValueError(f"MIDI note {index} has an invalid time interval")
-        if not 0 <= int(note.pitch) <= 127:
-            raise ValueError(f"MIDI note {index} has an invalid pitch")
-        if not 1 <= int(note.velocity) <= 127:
-            raise ValueError(f"MIDI note {index} has an invalid velocity")
-        if float(note.end) > audio_duration:
-            raise ValueError(
-                f"MIDI note {index} ends at {float(note.end):.9f} s, beyond "
-                f"the audio duration of {audio_duration:.9f} s"
-            )
 
 
 def _output_paths(
@@ -1366,7 +1309,7 @@ def pitch_shift_v1(
         provenance_path,
     )
     audio, sample_rate, audio_info, midi = _load_pair(source_audio, source_midi)
-    _validate_loaded_pair(audio, sample_rate, midi)
+    _validate_loaded_pair(audio, sample_rate, midi, reject_drum_tracks=True)
     shifted_pitches = [
         note.pitch + parameters.semitones
         for instrument in midi.instruments
@@ -1379,7 +1322,8 @@ def pitch_shift_v1(
         or max(shifted_pitches) > parameters.maximum_midi_pitch
     ):
         raise ValueError(
-            "pitch shift would move a label outside the configured model range; "
+            "pitch shift would move a label outside the configured output MIDI "
+            "range; "
             "the transform refuses to drop labels"
         )
     channel_first = np.ascontiguousarray(audio.T, dtype=np.float64)
@@ -1552,6 +1496,7 @@ __all__ = [
     "NoiseSNRParameters",
     "PitchShiftParameters",
     "ReverbFiltersParameters",
+    "ReverbOnlyParameters",
     "TimeStretchParameters",
     "archival_noise_v1",
     "fractional_detuning_v1",
@@ -1559,5 +1504,6 @@ __all__ = [
     "noise_snr_v1",
     "pitch_shift_v1",
     "reverb_filters_v1",
+    "reverb_only_v1",
     "time_stretch_v1",
 ]

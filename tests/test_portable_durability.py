@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import amt_augmentor._paired_io as paired_io
-import amt_augmentor.galdr_conventional_campaign as campaign
 
 
 def test_file_fsync_uses_windows_compatible_descriptor(monkeypatch):
@@ -38,8 +37,3 @@ def test_directory_fsync_is_skipped_on_windows(tmp_path, monkeypatch):
     monkeypatch.setattr(paired_io.os, "open", unexpected_open)
 
     paired_io._fsync_directory(tmp_path)
-
-
-def test_campaign_uses_shared_portable_fsync_helpers():
-    assert campaign._fsync_path is paired_io._fsync_path
-    assert campaign._fsync_directory is paired_io._fsync_directory

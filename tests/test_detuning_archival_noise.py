@@ -44,7 +44,7 @@ def _write_pair(
     sf.write(audio_path, audio, sample_rate, subtype="PCM_16")
 
     midi = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=9600)
-    instrument = pretty_midi.Instrument(program=40, name="fiddle")
+    instrument = pretty_midi.Instrument(program=40, name="lead_strings")
     instrument.notes.append(
         pretty_midi.Note(
             velocity=90,
@@ -87,7 +87,7 @@ def _write_long_pair_bounded(
             output.write(block)
 
     midi = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=9600)
-    instrument = pretty_midi.Instrument(program=40, name="fiddle")
+    instrument = pretty_midi.Instrument(program=40, name="lead_strings")
     instrument.notes.append(
         pretty_midi.Note(velocity=90, pitch=69, start=0.10, end=0.80)
     )
@@ -105,6 +105,21 @@ def _dominant_frequency(audio: np.ndarray, sample_rate: int) -> float:
     return float(frequencies[int(np.argmax(spectrum))])
 
 
+def _archival_parameters(
+    target_snr_db: float,
+    *,
+    hum_power_fraction: float = 0.20,
+    mains_frequency_hz: float = 60.0,
+    harmonic_count: int = 3,
+) -> ArchivalNoiseParameters:
+    return ArchivalNoiseParameters(
+        target_snr_db=target_snr_db,
+        hum_power_fraction=hum_power_fraction,
+        mains_frequency_hz=mains_frequency_hz,
+        harmonic_count=harmonic_count,
+    )
+
+
 @pytest.mark.parametrize(
     "function,parameters,transform",
     [
@@ -115,7 +130,7 @@ def _dominant_frequency(audio: np.ndarray, sample_rate: int) -> float:
         ),
         (
             archival_noise_v1,
-            ArchivalNoiseParameters(target_snr_db=28.0),
+            _archival_parameters(28.0),
             "archival_noise_v1",
         ),
     ],
@@ -216,7 +231,7 @@ def test_archival_noise_is_seeded_and_has_exact_aggregate_float_snr(
     parameters = ArchivalNoiseParameters(
         target_snr_db=28.0,
         hum_power_fraction=0.20,
-        mains_frequency_hz=50.0,
+        mains_frequency_hz=60.0,
         harmonic_count=3,
     )
     results = []
@@ -280,7 +295,7 @@ def test_archival_noise_real_scale_uses_bounded_blocks_and_preserves_pair(
         output_audio,
         output_midi,
         seed=424242,
-        parameters=ArchivalNoiseParameters(target_snr_db=24.0),
+        parameters=_archival_parameters(24.0),
     )
 
     source_info = sf.info(source_audio)
@@ -317,7 +332,7 @@ def test_archival_noise_publishes_pink_spectrum_and_seeded_harmonic_hum(
     parameters = ArchivalNoiseParameters(
         target_snr_db=24.0,
         hum_power_fraction=0.20,
-        mains_frequency_hz=50.0,
+        mains_frequency_hz=60.0,
         harmonic_count=3,
     )
     provenance = archival_noise_v1(
@@ -428,7 +443,7 @@ def test_archival_noise_uses_explicit_peak_guard_instead_of_clipping(
         output_audio,
         output_midi,
         seed=77,
-        parameters=ArchivalNoiseParameters(target_snr_db=0.0),
+        parameters=_archival_parameters(0.0),
     )
 
     output, _ = sf.read(output_audio)
@@ -476,18 +491,19 @@ def test_fractional_detuning_invalid_parameters_publish_nothing(
 @pytest.mark.parametrize(
     "parameters",
     [
-        ArchivalNoiseParameters(target_snr_db=float("nan")),
-        ArchivalNoiseParameters(target_snr_db=24.0, hum_power_fraction=0.0),
-        ArchivalNoiseParameters(target_snr_db=24.0, hum_power_fraction=1.0),
-        ArchivalNoiseParameters(target_snr_db=24.0, hum_power_fraction=True),
-        ArchivalNoiseParameters(target_snr_db=24.0, mains_frequency_hz=0.0),
-        ArchivalNoiseParameters(target_snr_db=24.0, mains_frequency_hz=float("inf")),
-        ArchivalNoiseParameters(target_snr_db=24.0, harmonic_count=0),
-        ArchivalNoiseParameters(target_snr_db=24.0, harmonic_count=17),
-        ArchivalNoiseParameters(target_snr_db=24.0, harmonic_count=1.5),
-        ArchivalNoiseParameters(target_snr_db=24.0, harmonic_count=True),
+        _archival_parameters(float("nan")),
+        _archival_parameters(24.0, hum_power_fraction=0.0),
+        _archival_parameters(24.0, hum_power_fraction=1.0),
+        _archival_parameters(24.0, hum_power_fraction=True),
+        _archival_parameters(24.0, mains_frequency_hz=0.0),
+        _archival_parameters(24.0, mains_frequency_hz=float("inf")),
+        _archival_parameters(24.0, harmonic_count=0),
+        _archival_parameters(24.0, harmonic_count=17),
+        _archival_parameters(24.0, harmonic_count=1.5),
+        _archival_parameters(24.0, harmonic_count=True),
         ArchivalNoiseParameters(
             target_snr_db=24.0,
+            hum_power_fraction=0.20,
             mains_frequency_hz=2000.0,
             harmonic_count=2,
         ),
@@ -514,6 +530,11 @@ def test_archival_noise_invalid_parameters_publish_nothing(
     assert not output_audio.with_suffix(".wav.provenance.json").exists()
 
 
+def test_archival_noise_requires_an_explicit_corpus_profile() -> None:
+    with pytest.raises(TypeError):
+        ArchivalNoiseParameters(target_snr_db=24.0)
+
+
 def test_silent_source_and_wrong_detuning_shape_fail_before_publication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -526,7 +547,7 @@ def test_silent_source_and_wrong_detuning_shape_fail_before_publication(
             tmp_path / "silent-output.wav",
             tmp_path / "silent-output.mid",
             seed=1,
-            parameters=ArchivalNoiseParameters(target_snr_db=24.0),
+            parameters=_archival_parameters(24.0),
         )
     assert not (tmp_path / "silent-output.wav").exists()
 
@@ -554,7 +575,7 @@ def test_silent_source_and_wrong_detuning_shape_fail_before_publication(
     "function,parameters",
     [
         (fractional_detuning_v1, FractionalDetuningParameters(cents=15.0)),
-        (archival_noise_v1, ArchivalNoiseParameters(target_snr_db=24.0)),
+        (archival_noise_v1, _archival_parameters(24.0)),
     ],
 )
 def test_new_transforms_refuse_overwrite_and_roll_back_partial_publication(

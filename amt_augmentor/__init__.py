@@ -2,8 +2,6 @@
 __version__ = "2.0.0a8"
 
 from amt_augmentor.conventional_augmentations import (  # noqa: E402
-    AGGRESSIVE_REVERB_ONLY_PRESETS_V1,
-    MILD_REVERB_ONLY_PRESETS_V1,
     ArchivalNoiseParameters,
     FractionalDetuningParameters,
     GainChorusParameters,
@@ -26,8 +24,6 @@ from amt_augmentor.local_time_warp import (  # noqa: E402
     local_time_warp_v1,
 )
 from amt_augmentor.pitch_shift_grid import (  # noqa: E402
-    CONSERVATIVE_PITCH_SHIFT_GRID_V1,
-    DENSE_PITCH_SHIFT_GRID_V1,
     materialize_pitch_shift_grid_v1,
     measure_absolute_pitch_shift_v1,
     validate_pitch_shift_grid_v1,
@@ -35,10 +31,6 @@ from amt_augmentor.pitch_shift_grid import (  # noqa: E402
 )
 
 __all__ = [
-    "AGGRESSIVE_REVERB_ONLY_PRESETS_V1",
-    "CONSERVATIVE_PITCH_SHIFT_GRID_V1",
-    "DENSE_PITCH_SHIFT_GRID_V1",
-    "MILD_REVERB_ONLY_PRESETS_V1",
     "ArchivalNoiseParameters",
     "FractionalDetuningParameters",
     "GainChorusParameters",
