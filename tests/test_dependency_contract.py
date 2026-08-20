@@ -24,7 +24,7 @@ def test_linux_pedalboard_wheels_exclude_known_sigill_releases():
 
     assert len(linux) == 1
     assert ">=0.7.3" in linux[0]
-    assert "<0.9.21" in linux[0]
+    assert "<0.9.20" in linux[0]
     assert len(non_linux) == 1
     assert ">=0.7.3" in non_linux[0]
     assert "<1.0.0" in non_linux[0]
