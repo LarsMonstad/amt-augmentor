@@ -49,6 +49,10 @@ jobs:
           pip install -e .
           pip install pytest pytest-cov
 
+      - name: Smoke-test Pedalboard import
+        run: |
+          python -c "from importlib.metadata import version; print('pedalboard', version('pedalboard'), flush=True); import pedalboard"
+
       - name: Run tests
         run: |
           pytest tests/ -v --tb=short

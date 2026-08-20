@@ -39,6 +39,8 @@ from amt_augmentor import __version__
 from amt_augmentor._paired_io import (
     ANNOTATION_MIDI_RESOLUTION,
     ANNOTATION_MIDI_TEMPO,
+    _fsync_directory,
+    _fsync_path,
 )
 from amt_augmentor.conventional_augmentations import (
     GainChorusParameters,
@@ -957,17 +959,6 @@ def validate_plan(document: Dict[str, Any]) -> Dict[str, Any]:
     return document
 
 
-def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    descriptor = os.open(str(path), flags)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 def _write_json(path: Path, document: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
@@ -1026,11 +1017,7 @@ def _write_normalized_midi(path: Path, midi: pretty_midi.PrettyMIDI) -> None:
         raise CampaignError(f"refusing to overwrite derivative MIDI: {path}")
     midi.write(str(path))
     os.chmod(path, PUBLISHED_FILE_MODE)
-    descriptor = os.open(str(path), os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    _fsync_path(path)
 
 
 def _copy_file(source: Path, target: Path) -> None:

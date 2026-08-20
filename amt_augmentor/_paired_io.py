@@ -331,7 +331,11 @@ def _write_provenance(path: Path, provenance: Dict[str, Any]) -> None:
 
 
 def _fsync_path(path: Path) -> None:
-    descriptor = os.open(str(path), os.O_RDONLY)
+    # Windows' CRT rejects ``fsync`` on a descriptor opened read-only with
+    # ``EBADF``.  Every path passed here is one of our writable staging files,
+    # so open it read/write (and in binary mode where that flag exists).
+    flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(str(path), flags)
     try:
         os.fsync(descriptor)
     finally:
@@ -339,6 +343,11 @@ def _fsync_path(path: Path) -> None:
 
 
 def _fsync_directory(directory: Path) -> None:
+    # Windows does not expose POSIX directory descriptors through ``os.open``.
+    # The files themselves are flushed above; directory fsync is an additional
+    # durability guarantee available on POSIX filesystems only.
+    if os.name == "nt":
+        return
     flags = os.O_RDONLY
     if hasattr(os, "O_DIRECTORY"):
         flags |= os.O_DIRECTORY
