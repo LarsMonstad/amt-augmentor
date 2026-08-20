@@ -477,7 +477,7 @@ If you use this toolkit in your research, please cite:
 @software{amt_augmentor,
   author       = {Lars Monstad and contributors},
   title        = {AMT-Augmentor: Audio + MIDI augmentation toolkit for AMT datasets},
-  version      = {2.0.0a8},
+  version      = {2.0.0},
   year         = {2026},
   publisher    = {Bots for Music},
   url          = {https://github.com/LarsMonstad/amt-augmentor}

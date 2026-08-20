@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amt-augmentor"
-version = "2.0.0a8"
+version = "2.0.0"
 authors = [
   { name="Lars Monstad", email="lars.monstad@gmail.com" },
 ]
@@ -12,7 +12,7 @@ description = "Audio + MIDI paired augmentation toolkit for Automatic Music Tran
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Programming Language :: Python :: 3",

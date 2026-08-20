@@ -26,7 +26,7 @@ STUDY_SPECIFIC_PUBLIC_NAMES = {
 
 
 def test_package_exports_only_supported_transform_families():
-    assert amt_augmentor.__version__ == "2.0.0a8"
+    assert amt_augmentor.__version__ == "2.0.0"
     assert {
         "ArchivalNoiseParameters",
         "FractionalDetuningParameters",

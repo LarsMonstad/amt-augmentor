@@ -2,10 +2,10 @@
 
 All notable changes to AMT-Augmentor will be documented in this file.
 
-## [2.0.0a8] - Unreleased
+## [2.0.0] - 2026-08-20
 
-The `2.0.0` alpha work is consolidated here because the earlier alpha numbers
-were development versions and were not published as PyPI releases.
+The `2.0.0` development work is consolidated here from the preceding alpha
+builds.
 
 ### Added
 - Deterministic paired APIs for gain/chorus, measured target-SNR noise,

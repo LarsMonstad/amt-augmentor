@@ -1,5 +1,5 @@
 # amt_augmentor/__init__.py
-__version__ = "2.0.0a8"
+__version__ = "2.0.0"
 
 from amt_augmentor.conventional_augmentations import (  # noqa: E402
     ArchivalNoiseParameters,
