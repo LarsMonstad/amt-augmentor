@@ -364,6 +364,50 @@ def test_long_duration_midi_uses_a_safe_adaptive_tick_resolution(tmp_path):
     )
 
 
+def test_long_duration_midi_avoids_pretty_midi_tempo_truncation_drift(tmp_path):
+    source = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=480)
+    instrument = pretty_midi.Instrument(program=0)
+    instrument.notes.append(
+        pretty_midi.Note(
+            velocity=90,
+            pitch=60,
+            start=763.2072450908049,
+            end=773.0,
+        )
+    )
+    source.instruments.append(instrument)
+    source.time_signature_changes.append(
+        pretty_midi.TimeSignature(4, 4, 0.0)
+    )
+
+    transformed = paired_io._copy_midi_with_time_map(
+        source,
+        map_time=lambda value: value,
+    )
+    # 5174 is the largest tick-budget-safe resolution for this duration, but
+    # pretty_midi 0.2.11 writes it as 499999 us/beat.  5172 is the nearest
+    # lower resolution that serializes the intended 500000-us tempo exactly.
+    assert transformed.resolution == 5172
+
+    output = tmp_path / "tempo-safe-long.mid"
+    transformed.write(str(output))
+    serialized = pretty_midi.PrettyMIDI(str(output))
+    tick_seconds = (
+        60.0 / paired_io.ANNOTATION_MIDI_TEMPO / transformed.resolution
+    )
+    assert serialized.get_tempo_changes()[1].tolist() == pytest.approx([120.0])
+    assert serialized.instruments[0].notes[0].start == pytest.approx(
+        763.2072450908049,
+        abs=tick_seconds / 2.0 + 1e-9,
+    )
+    assert serialized.instruments[0].notes[0].end == pytest.approx(
+        773.0,
+        abs=tick_seconds / 2.0 + 1e-9,
+    )
+    report = paired_io._midi_timing_quantization_report(output, transformed)
+    assert report["maximum_retained_note_endpoint_error_ticks"] <= 0.5
+
+
 def test_pitch_shift_rejects_drum_tracks_without_rejecting_other_instruments(
     tmp_path,
 ):

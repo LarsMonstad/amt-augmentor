@@ -26,6 +26,7 @@ ANNOTATION_MIDI_RESOLUTION = 9600
 ANNOTATION_MIDI_TEMPO = 120.0
 ANNOTATION_MIDI_MAXIMUM_TICK = 8_000_000
 ANNOTATION_MIDI_MINIMUM_RESOLUTION = 96
+ANNOTATION_MIDI_TEMPO_MICROSECONDS = round(60_000_000 / ANNOTATION_MIDI_TEMPO)
 SUPPORTED_OUTPUT_AUDIO_SUFFIXES = {".flac", ".wav"}
 SUPPORTED_OUTPUT_MIDI_SUFFIXES = {".mid", ".midi"}
 
@@ -175,6 +176,26 @@ def _copy_midi_with_time_map(
         raise ValueError(
             "Mapped MIDI duration is too long to serialize within the safe tick "
             f"budget at {ANNOTATION_MIDI_MINIMUM_RESOLUTION} ticks per beat"
+        )
+
+    # pretty_midi 0.2.11 reconstructs the file's integer tempo value from a
+    # floating-point tick scale and truncates it.  At some resolutions that
+    # turns an intended 500000 us/beat into 499999 us/beat.  The resulting
+    # one-microsecond-per-beat drift can exceed half a tick in long files.
+    # Select the nearest lower resolution whose written tempo is exact.  This
+    # costs at most a few ticks per beat while retaining the requested 120-BPM
+    # time base and the half-tick serialization guarantee.
+    while resolution >= ANNOTATION_MIDI_MINIMUM_RESOLUTION:
+        tick_scale = 60.0 / (ANNOTATION_MIDI_TEMPO * resolution)
+        serialized_tempo_microseconds = int(
+            60_000_000 / (60.0 / (tick_scale * resolution))
+        )
+        if serialized_tempo_microseconds == ANNOTATION_MIDI_TEMPO_MICROSECONDS:
+            break
+        resolution -= 1
+    if resolution < ANNOTATION_MIDI_MINIMUM_RESOLUTION:
+        raise RuntimeError(
+            "No safe MIDI resolution preserves the configured constant tempo"
         )
 
     output = pretty_midi.PrettyMIDI(
