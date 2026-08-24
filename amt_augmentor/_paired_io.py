@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import secrets
 from pathlib import Path
@@ -23,6 +24,8 @@ import soundfile as sf
 PROVENANCE_SCHEMA_VERSION = 1
 ANNOTATION_MIDI_RESOLUTION = 9600
 ANNOTATION_MIDI_TEMPO = 120.0
+ANNOTATION_MIDI_MAXIMUM_TICK = 8_000_000
+ANNOTATION_MIDI_MINIMUM_RESOLUTION = 96
 SUPPORTED_OUTPUT_AUDIO_SUFFIXES = {".flac", ".wav"}
 SUPPORTED_OUTPUT_MIDI_SUFFIXES = {".mid", ".midi"}
 
@@ -133,9 +136,50 @@ def _copy_midi_with_time_map(
 ) -> pretty_midi.PrettyMIDI:
     """Copy an AMT annotation MIDI through one time mapping."""
 
+    mapped_times = []
+    for instrument in source.instruments:
+        for note in instrument.notes:
+            mapped_times.extend(
+                (map_time(float(note.start)), map_time(float(note.end)))
+            )
+        mapped_times.extend(
+            map_time(float(event.time))
+            for event in instrument.control_changes
+        )
+        mapped_times.extend(
+            map_time(float(event.time)) for event in instrument.pitch_bends
+        )
+    for attribute in (
+        "key_signature_changes",
+        "time_signature_changes",
+        "lyrics",
+        "text_events",
+    ):
+        mapped_times.extend(
+            map_time(float(event.time)) for event in getattr(source, attribute, [])
+        )
+    maximum_mapped_time = max(mapped_times, default=0.0)
+    if not math.isfinite(maximum_mapped_time) or maximum_mapped_time < 0.0:
+        raise ValueError("mapped MIDI event times must be finite and nonnegative")
+    ticks_per_second_per_resolution = ANNOTATION_MIDI_TEMPO / 60.0
+    if maximum_mapped_time == 0.0:
+        resolution = ANNOTATION_MIDI_RESOLUTION
+    else:
+        maximum_safe_resolution = math.floor(
+            ANNOTATION_MIDI_MAXIMUM_TICK
+            / maximum_mapped_time
+            / ticks_per_second_per_resolution
+        )
+        resolution = min(ANNOTATION_MIDI_RESOLUTION, maximum_safe_resolution)
+    if resolution < ANNOTATION_MIDI_MINIMUM_RESOLUTION:
+        raise ValueError(
+            "Mapped MIDI duration is too long to serialize within the safe tick "
+            f"budget at {ANNOTATION_MIDI_MINIMUM_RESOLUTION} ticks per beat"
+        )
+
     output = pretty_midi.PrettyMIDI(
         initial_tempo=ANNOTATION_MIDI_TEMPO,
-        resolution=ANNOTATION_MIDI_RESOLUTION,
+        resolution=resolution,
     )
 
     for instrument in source.instruments:
@@ -294,7 +338,9 @@ def _midi_timing_quantization_report(
             attributes=event_attributes,
         )
 
-    tick_seconds = 60.0 / ANNOTATION_MIDI_TEMPO / ANNOTATION_MIDI_RESOLUTION
+    if serialized_midi.resolution != expected_midi.resolution:
+        raise RuntimeError("Serialized MIDI changed the selected tick resolution")
+    tick_seconds = 60.0 / ANNOTATION_MIDI_TEMPO / expected_midi.resolution
     half_tick_seconds = tick_seconds / 2.0
     numeric_tolerance_seconds = 1e-9
     maximum_error_seconds = max(note_errors, default=0.0)
@@ -613,7 +659,11 @@ def _stage_and_publish_bundle(
                 "purpose": "time-aligned AMT annotation",
                 "new_serialization_applied": True,
                 "constant_tempo_bpm": ANNOTATION_MIDI_TEMPO,
-                "ticks_per_beat": ANNOTATION_MIDI_RESOLUTION,
+                "ticks_per_beat": int(output_midi.resolution),
+                "default_ticks_per_beat": ANNOTATION_MIDI_RESOLUTION,
+                "adaptive_resolution_for_long_duration": (
+                    int(output_midi.resolution) < ANNOTATION_MIDI_RESOLUTION
+                ),
             }
             provenance["midi_timing_quantization"] = (
                 _midi_timing_quantization_report(

@@ -288,6 +288,8 @@ def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
         "new_serialization_applied": True,
         "constant_tempo_bpm": paired_io.ANNOTATION_MIDI_TEMPO,
         "ticks_per_beat": paired_io.ANNOTATION_MIDI_RESOLUTION,
+        "default_ticks_per_beat": paired_io.ANNOTATION_MIDI_RESOLUTION,
+        "adaptive_resolution_for_long_duration": False,
     }
     assert provenance["midi_timing_quantization"][
         "output_midi_tick_seconds"
@@ -317,6 +319,49 @@ def test_pitch_shift_is_integral_synchronized_and_never_drops_labels(tmp_path):
             parameters=PitchShiftParameters(semitones=2),
         )
     assert not (tmp_path / "bad.wav").exists()
+
+
+def test_long_duration_midi_uses_a_safe_adaptive_tick_resolution(tmp_path):
+    source = pretty_midi.PrettyMIDI(initial_tempo=120.0, resolution=480)
+    instrument = pretty_midi.Instrument(program=0)
+    instrument.notes.append(
+        pretty_midi.Note(
+            velocity=90,
+            pitch=60,
+            start=0.25,
+            end=2800.0,
+        )
+    )
+    source.instruments.append(instrument)
+
+    transformed = paired_io._copy_midi_with_time_map(
+        source,
+        map_time=lambda value: value,
+    )
+    assert (
+        paired_io.ANNOTATION_MIDI_MINIMUM_RESOLUTION
+        <= transformed.resolution
+        < paired_io.ANNOTATION_MIDI_RESOLUTION
+    )
+    expected_largest_tick = (
+        2800.0
+        * paired_io.ANNOTATION_MIDI_TEMPO
+        / 60.0
+        * transformed.resolution
+    )
+    assert expected_largest_tick <= paired_io.ANNOTATION_MIDI_MAXIMUM_TICK
+
+    output = tmp_path / "long.mid"
+    transformed.write(str(output))
+    serialized = pretty_midi.PrettyMIDI(str(output))
+    assert serialized.resolution == transformed.resolution
+    tick_seconds = (
+        60.0 / paired_io.ANNOTATION_MIDI_TEMPO / transformed.resolution
+    )
+    assert serialized.instruments[0].notes[0].end == pytest.approx(
+        2800.0,
+        abs=tick_seconds / 2.0 + 1e-9,
+    )
 
 
 def test_pitch_shift_rejects_drum_tracks_without_rejecting_other_instruments(
