@@ -1,0 +1,836 @@
+{
+  "$schema": "./schema-v1.json",
+  "schema_version": 1,
+  "kind": "amt_augmentor_research_reference",
+  "reference_id": "maestro-transkun-v1",
+  "status": "complete",
+  "title": "MAESTRO Transkun augmentation fine-tuning results",
+  "summary": "Completed single-seed MAESTRO validation comparisons cover an untouched official Transkun paper checkpoint; 50000-update clean, built-in, and fixed 50/50 single-family fine-tuning arms; and two 50000-update AMT-Augmentor dataset-expansion bundles that add deterministic transformed song versions to the originals.",
+  "package_policy": {
+    "changes_runtime_defaults": false,
+    "recipe_status": "no_recipe",
+    "guidance": [
+      "Treat the untouched official checkpoint as a contextual baseline and the 50000-update clean arm as the causal control for the fine-tuning comparisons.",
+      "Use model-native and toolkit augmentation as separate interventions unless their component transforms and exposure probabilities are explicitly matched.",
+      "Do not promote any MAESTRO arm in this card to an AMT-Augmentor package default."
+    ]
+  },
+  "scope": {
+    "evidence_level": "single_seed_validation",
+    "dataset": "MAESTRO v3.0.0",
+    "domain": "aligned concert-piano audio and MIDI",
+    "training_source_count": 962,
+    "validation_units": {
+      "kind": "recordings",
+      "count": 137
+    },
+    "random_seeds": [424242],
+    "selection_partition": "validation",
+    "test_data_accessed": false,
+    "checkpoint_selection": "The official paper checkpoint was evaluated untouched. Every fine-tuning arm reports its fixed final 50000-update checkpoint; there was no validation checkpoint search.",
+    "publication_status": "completed internal reference experiment"
+  },
+  "artifact_bases": [
+    {
+      "id": "maestro-runtime-artifacts",
+      "kind": "logical_artifact_root",
+      "uri": "maestro-artifact://maestro-transkun-research/",
+      "revision": null,
+      "availability": "unpublished",
+      "locator_prefixes": ["checkpoints/", "evaluations/", "launches/", "materialized/", "metadata/", "runs/", "standardized/"],
+      "immutability": "The research workspace is not redistributed; every cited file is immutable for this card through its required per-artifact SHA-256."
+    }
+  ],
+  "software_provenance": [
+    {
+      "name": "AMT-Augmentor",
+      "role": "Standardization and paired materialization for the noise, reverb, and time-stretch arms",
+      "revision": "4dc2028d4c127f0e3bd4d22b389ade4703631a9e",
+      "revision_scope": "Exact AMT-Augmentor revision used by the completed MAESTRO preparation protocol; it does not describe Transkun's built-in augmentation."
+    },
+    {
+      "name": "Transkun",
+      "role": "Experimental training and evaluation control",
+      "revision": "c219479911f641db6710a04c6d6f6dfab6bb1404",
+      "revision_scope": "Exact semantic base control revision bound by the original six-arm protocol and inherited by the expanded-bundle protocol."
+    },
+    {
+      "name": "Transkun bundle campaign control",
+      "role": "Dataset-expansion metadata construction, training launch, and evaluation control",
+      "revision": "d3197aafacbc176ddf1cb854ccb46648b019bb25",
+      "revision_scope": "Exact clean control-tree revision bound by the expanded-bundle training launch manifest; its base control revision is c219479911f641db6710a04c6d6f6dfab6bb1404."
+    },
+    {
+      "name": "Transkun upstream",
+      "role": "Official paper checkpoint source checkout",
+      "revision": "c5cb8370e17b4a1650b5971ba87ee4b0d208e5b6",
+      "revision_scope": "Repository revision recorded when the official checkpoint artifact was downloaded; the checkpoint and model configuration are independently bound by SHA-256."
+    }
+  ],
+  "metric_definitions": [
+    {
+      "id": "recording_macro_onset_f1",
+      "label": "Onset F1",
+      "unit": "fraction",
+      "aggregation": "macro mean of Transkun note-onset F1 over 137 validation recordings",
+      "range": [0.0, 1.0]
+    },
+    {
+      "id": "recording_macro_onset_offset_f1",
+      "label": "Onset plus offset F1",
+      "unit": "fraction",
+      "aggregation": "macro mean of Transkun note onset-plus-offset F1 over 137 validation recordings",
+      "range": [0.0, 1.0]
+    }
+  ],
+  "protocols": [
+    {
+      "id": "maestro-transkun-50k-finetune",
+      "question": "How do fixed single-family AMT-Augmentor views and Transkun's shipped built-in augmentation compare with clean fine-tuning from the official paper checkpoint?",
+      "design": "The untouched official checkpoint is a contextual baseline, not a 50000-update training arm. The five fine-tuning arms start from that same checkpoint, use fresh optimizers, seed 424242, two GPUs, an effective batch size of 12, and a fixed 50000-update horizon. Clean and built-in metadata contain duplicated originals only; the built-in arm applies Transkun augmentation on the fly. Each toolkit arm contains 50 percent original metadata and 50 percent deterministic views from one transform family. Training and validation both use pedal-extended labels.",
+      "model": {
+        "name": "Transkun v2 paper model",
+        "parameters": 12859535,
+        "paper": "https://arxiv.org/abs/2404.09466",
+        "model_configuration_sha256": "b5f55fdd6fcca19871510bc68151eb1d09ea5e4db59aeeb7cdc59f5977ff950c",
+        "official_checkpoint_sha256": "76469be487911e110e0e661fadb583645e89c35364faa1ef8897d5600ba6ce20"
+      },
+      "training": {
+        "seed": 424242,
+        "source_recordings": 962,
+        "fine_tuning_updates": 50000,
+        "paper_training_budget_updates": 500000,
+        "world_size": 2,
+        "batch_per_rank": 6,
+        "effective_batch_size": 12,
+        "maximum_learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "fresh_optimizer_per_arm": true,
+        "pedal_extension_applied": true,
+        "internal_fine_tune_not_paper_reproduction": true,
+        "metadata_entries_per_fine_tuning_arm": 1924,
+        "metadata_manifest_sha256_by_arm": {
+          "clean": "dad3c04c76d47139499bc959e107c5ec1ff7a3d85f5a605f7cf3421cf6550882",
+          "builtin": "a49a2873706e8bca25361a3193143fe7549b180afe8cabad61f4871392f012a2",
+          "noise": "059580c38191f1fcfa6aef348919383d89069727b6f0d399da467f96e0f72fdf",
+          "reverb": "93bcbf6921f6d99c75d9b86d023410693b8c576b51927295123191cad1d09a00",
+          "time": "2dd03a1219e26e84f47e2b25468e1805d20df7009ae17061564cf9e59c827f4c"
+        },
+        "run_result_sha256_by_arm": {
+          "clean": "cd07b75d22bbb613f4646206008f1ac489b1a53445726b5d925987135713be5d",
+          "builtin": "d23ddec32ba4044b4bb534b1499518b23079d1e34225ff43c5817f5f8bbab3fe",
+          "noise": "70ff6f163faaf61dd731b7072da13db6fc591a412284c6f70820918d35f62370",
+          "reverb": "c9d7d1ab0aae47ef40f145b45f98f69587d9541b8044d736cdc42c19081c4574",
+          "time": "f74e03ea8542a5c47700d9bb7b7616aee8dd496cd60e3a542c022086b9562967"
+        },
+        "toolkit_parameters": {
+          "noise": "noise_snr_v1 at 20, 25, 30, or 35 dB SNR",
+          "reverb": "reverb_only_v1 profiles (room_size, wet, dry, damping): (0.25, 0.10, 0.90, 0.50), (0.45, 0.18, 0.82, 0.55), or (0.65, 0.25, 0.75, 0.60), all with width 1 and freeze 0",
+          "time": "time_stretch_v1 at rates 0.90, 0.95, 1.05, or 1.10 with synchronized MIDI",
+          "parameter_assignment": "per-source selection from a stable SHA-derived seed under campaign seed 424242"
+        },
+        "builtin_bundle": ["random stereo downmix", "small detuning", "seven-band equalization", "Gaussian noise"]
+      },
+      "evaluation": {
+        "partition": "validation",
+        "recording_count": 137,
+        "aggregation": "macro_by_recording",
+        "segment_size_seconds": 16.0,
+        "segment_hop_seconds": 8.0,
+        "pedal_extension_applied": true,
+        "canonical_media_hashes_verified": true,
+        "canonical_records_sha256": "f3ecbd19657006e17560d66edb40eb8f2f4022efee33d43216b5f2b88833f918",
+        "validation_manifest_sha256": "71223bb536d37ad6b5e8d29d55cb258df75e947683847c212b9e0764fc95be07",
+        "validation_metadata_sha256": "e5a548b6ab2102014ebaf7849a2c909f756aa3dd4607f97dee847a57d068cb9b",
+        "test_media_or_labels_opened": false,
+        "checkpoint_search": false,
+        "reported_checkpoint": "untouched official checkpoint for paper-baseline; fixed final update 50000 for every fine-tuning arm",
+        "recordings_sha256_by_arm": {
+          "paper-baseline": "16f0b0e840dea57f4518b8b51e41731c3d587fa17f5ec6f9eafa371ff4facb61",
+          "clean": "07a2ee6f26511ed7d12591736db703e097d487d5b1c98547290f1f5738b1ce5f",
+          "builtin": "764ccfe3957662e5a1ebd97fc9214a32b31b775de53acfd413df0f119c9fc3b1",
+          "noise": "1286206ceba0b9d1c98f7d085f6aab4490cadbf660dc5bce5cdd36dc6bf05ab9",
+          "reverb": "da693a685d7a12008a730011f00f9f933fc0eec790826569fbc91801d58ca239",
+          "time": "a8f033c61f9acd9722052982caaec1382b8444cf41f1b4c7c7cfc3525019b31a"
+        }
+      },
+      "arms": [
+        {
+          "id": "paper-baseline",
+          "label": "Untouched official paper checkpoint",
+          "transform_families": [],
+          "description": "Local pedal-extended validation of the downloaded official checkpoint, with no additional training. This is contextual evidence rather than a fine-tuning control."
+        },
+        {
+          "id": "clean",
+          "label": "Clean 50000-update control",
+          "transform_families": [],
+          "description": "The official checkpoint fine-tuned for 50000 updates on duplicated original-only metadata.",
+          "logical_exposure": {"original_metadata_fraction": 1.0}
+        },
+        {
+          "id": "builtin",
+          "label": "Transkun built-in augmentation",
+          "transform_families": ["transkun_builtin_bundle"],
+          "description": "The same duplicated-original metadata as clean, with Transkun's bundled augmentations applied on the fly.",
+          "logical_exposure": {"original_metadata_fraction": 1.0}
+        },
+        {
+          "id": "noise",
+          "label": "AMT-Augmentor noise",
+          "transform_families": ["noise_snr_v1"],
+          "description": "A fixed metadata mixture with 50 percent originals and 50 percent deterministic target-SNR noise views.",
+          "logical_exposure": {"original_metadata_fraction": 0.5, "noise_snr_v1_metadata_fraction": 0.5}
+        },
+        {
+          "id": "reverb",
+          "label": "AMT-Augmentor reverb",
+          "transform_families": ["reverb_only_v1"],
+          "description": "A fixed metadata mixture with 50 percent originals and 50 percent deterministic reverb-only views.",
+          "logical_exposure": {"original_metadata_fraction": 0.5, "reverb_only_v1_metadata_fraction": 0.5}
+        },
+        {
+          "id": "time",
+          "label": "AMT-Augmentor time stretch",
+          "transform_families": ["time_stretch_v1"],
+          "description": "A fixed metadata mixture with 50 percent originals and 50 percent deterministic time-stretched views with synchronized MIDI.",
+          "logical_exposure": {"original_metadata_fraction": 0.5, "time_stretch_v1_metadata_fraction": 0.5}
+        }
+      ],
+      "source_artifacts": [
+        {
+          "role": "training launch protocol",
+          "locator": "launches/maestro-paper-v2-augmentation-internal-v1-20260826-training/manifest.json",
+          "sha256": "0d8012ee192defadb57212c5c2b1cab4eb49c4745c424c8291616198c9b8ba51",
+          "included": false
+        },
+        {
+          "role": "baseline launch protocol",
+          "locator": "launches/maestro-paper-v2-augmentation-internal-v1-20260826-baseline/manifest.json",
+          "sha256": "2b926def26b81fa2dc6d47a7e46f60295537e65df90c0072faaadddcd4eb8300",
+          "included": false
+        },
+        {
+          "role": "metadata launch protocol",
+          "locator": "launches/maestro-paper-v2-augmentation-internal-v1-20260826-metadata/manifest.json",
+          "sha256": "187f06d4669f9a021d125ded38ba36c2e3009794400cf254da37673fb23b0904",
+          "included": false
+        },
+        {
+          "role": "augmentation preparation protocol",
+          "locator": "launches/maestro-augmentation-internal-v2-20260824-preparation/manifest.json",
+          "sha256": "18e5c255256a0810880d4c72eedd083779db68c16cc5f1272bc2faa79dc9b41f",
+          "included": false
+        },
+        {
+          "role": "validation metadata manifest",
+          "locator": "metadata/maestro-paper-v2-augmentation-internal-v1-20260826/validation-manifest.json",
+          "sha256": "71223bb536d37ad6b5e8d29d55cb258df75e947683847c212b9e0764fc95be07",
+          "included": false
+        },
+        {
+          "role": "validation metadata payload",
+          "locator": "metadata/maestro-paper-v2-augmentation-internal-v1-20260826/validation.pickle",
+          "sha256": "e5a548b6ab2102014ebaf7849a2c909f756aa3dd4607f97dee847a57d068cb9b",
+          "included": false
+        },
+        {
+          "role": "standardized source completion receipt",
+          "locator": "standardized/maestro-augmentation-internal-v2-20260824/.standardization/standardization-complete.json",
+          "sha256": "3549d6fd60c647ffc83bded6ff2749a2ab6a83283f75bc435ce5b7490d772e59",
+          "included": false
+        },
+        {
+          "role": "noise materialization completion receipt",
+          "locator": "materialized/maestro-augmentation-internal-v2-20260824/noise/materialization-complete.json",
+          "sha256": "c581283b365a2b19674a2fc1429b748702f6ab2e7500f9f263af977f4142bb59",
+          "included": false
+        },
+        {
+          "role": "reverb materialization completion receipt",
+          "locator": "materialized/maestro-augmentation-internal-v2-20260824/reverb/materialization-complete.json",
+          "sha256": "764f63580b40b9bbc15569913daa130be6f8f64481c33bcbc6080fe66b28b8b0",
+          "included": false
+        },
+        {
+          "role": "time-stretch materialization completion receipt",
+          "locator": "materialized/maestro-augmentation-internal-v2-20260824/time/materialization-complete.json",
+          "sha256": "c64602496f131cce035362d839096e5159233f3af5c69d2a914c33b6c231eb4c",
+          "included": false
+        },
+        {
+          "role": "official model configuration",
+          "locator": "checkpoints/official-transkun-v2-paper/checkpointMSimpler/model.conf",
+          "sha256": "b5f55fdd6fcca19871510bc68151eb1d09ea5e4db59aeeb7cdc59f5977ff950c",
+          "included": false
+        },
+        {
+          "role": "official paper checkpoint",
+          "locator": "checkpoints/official-transkun-v2-paper/checkpointMSimpler/checkpoint.pt",
+          "sha256": "76469be487911e110e0e661fadb583645e89c35364faa1ef8897d5600ba6ce20",
+          "included": false
+        },
+        {
+          "role": "clean final checkpoint",
+          "locator": "runs/maestro-paper-v2-augmentation-internal-v1-20260826/clean/last.pt",
+          "sha256": "fef22f4722e46c771602164030fcf6f72534cd5dc2c5f10252700cebfc8fa92a",
+          "included": false
+        },
+        {
+          "role": "builtin final checkpoint",
+          "locator": "runs/maestro-paper-v2-augmentation-internal-v1-20260826/builtin/last.pt",
+          "sha256": "5ed5864ad61cb2dedae40ae9fe25fe805bd5d688a60c1fcd1209ae8f96f13285",
+          "included": false
+        },
+        {
+          "role": "noise final checkpoint",
+          "locator": "runs/maestro-paper-v2-augmentation-internal-v1-20260826/noise/last.pt",
+          "sha256": "585f954103df0ada111a57dad8f292e5ffdcbdbbb2df98f780d9d6c721c9e182",
+          "included": false
+        },
+        {
+          "role": "reverb final checkpoint",
+          "locator": "runs/maestro-paper-v2-augmentation-internal-v1-20260826/reverb/last.pt",
+          "sha256": "bbf45f2c8977ad4bd491b3fbfeb23ec55a72000996886daf81059aaac8eaf71a",
+          "included": false
+        },
+        {
+          "role": "time final checkpoint",
+          "locator": "runs/maestro-paper-v2-augmentation-internal-v1-20260826/time/last.pt",
+          "sha256": "a886a7177c536abafc888b7039d177720e7a125380b42e93ca6ead17ffdcaaee",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "maestro-transkun-expanded-bundles-50k",
+      "question": "Does adding deterministic AMT-Augmentor reverb and synchronized time-stretch song versions, with or without noise versions, improve fixed-compute Transkun fine-tuning over the existing clean and built-in controls?",
+      "design": "This is physical dataset expansion, not an on-the-fly probability mixture: every one of the 962 source recordings remains in the training dataset and is joined by one deterministic reverb view and one synchronized time-stretch audio-and-MIDI view in RT; NRT additionally includes one deterministic noise view. RT therefore has 2886 entries and NRT has 3848. Both arms start from the official paper checkpoint with fresh optimizers, use seed 424242, two GPUs, effective batch 12, no Transkun built-in augmentation, pedal-extended labels, and exactly 50000 optimizer updates. Fixed update compute is held constant, so the arms receive 600000 scheduled optimizer-consumed examples rather than equal epochs. RT was selected post hoc. Because RT and NRT differ in both view diversity and the original-view fraction, NRT minus RT is descriptive and is not an isolated noise effect.",
+      "model": {
+        "name": "Transkun v2 paper model",
+        "parameters": 12859535,
+        "paper": "https://arxiv.org/abs/2404.09466",
+        "model_configuration_sha256": "b5f55fdd6fcca19871510bc68151eb1d09ea5e4db59aeeb7cdc59f5977ff950c",
+        "official_checkpoint_sha256": "76469be487911e110e0e661fadb583645e89c35364faa1ef8897d5600ba6ce20"
+      },
+      "training": {
+        "seed": 424242,
+        "source_recordings": 962,
+        "fine_tuning_updates": 50000,
+        "paper_training_budget_updates": 500000,
+        "world_size": 2,
+        "batch_per_rank": 6,
+        "effective_batch_size": 12,
+        "maximum_learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "fresh_optimizer_per_arm": true,
+        "pedal_extension_applied": true,
+        "internal_fine_tune_not_paper_reproduction": true,
+        "physical_dataset_expansion": true,
+        "new_dsp_performed": false,
+        "builtin_augmentation": false,
+        "fixed_compute_single_seed": true,
+        "scheduled_component_draw_total_per_arm": 600000,
+        "metadata_entries_by_arm": {
+          "rt-expanded": 2886,
+          "nrt-expanded": 3848
+        },
+        "logical_views_per_source_by_arm": {
+          "rt-expanded": 3,
+          "nrt-expanded": 4
+        },
+        "scheduled_component_draws_by_arm": {
+          "rt-expanded": {
+            "original": 199332,
+            "reverb": 199483,
+            "time": 201185
+          },
+          "nrt-expanded": {
+            "original": 149632,
+            "noise": 149766,
+            "reverb": 149641,
+            "time": 150961
+          }
+        },
+        "scheduled_component_draw_fractions_by_arm": {
+          "rt-expanded": {
+            "original": 0.33222,
+            "reverb": 0.33247166666666667,
+            "time": 0.3353083333333333
+          },
+          "nrt-expanded": {
+            "original": 0.24938666666666667,
+            "noise": 0.24961,
+            "reverb": 0.24940166666666666,
+            "time": 0.25160166666666667
+          }
+        },
+        "scheduled_draw_scope": "Exact optimizer-consumed draws for the pinned iterator, DistributedSampler, two ranks, batch six per rank, no skipped batches, and completed 50000-update runs; worker prefetch beyond the fixed-stop boundary is excluded because it contributes no gradients.",
+        "metadata_manifest_sha256_by_arm": {
+          "rt-expanded": "84939309fc9cd3699c024a0ebdcc7a0b2993b6a35cdaa29d472c708abedf4120",
+          "nrt-expanded": "dd7bebd20aa8f368c19d1061a4dbfe857b1061fe2f7df6733ff128243237a2e9"
+        },
+        "metadata_payload_sha256_by_arm": {
+          "rt-expanded": "13a6bf923a0bd1886fd273935af3449d34882de90b784cac009fdb38f547b3f2",
+          "nrt-expanded": "c79afa6a7b5dfa25356c4a48cac3cd68e9cc3534a60d98df9593a07ca565741c"
+        },
+        "run_result_sha256_by_arm": {
+          "rt-expanded": "0d51baca4f326be68911a847270b19a83696853c39b56138905d9c1f843e3825",
+          "nrt-expanded": "83e818f8fc48673663069a68d731fa3f620323e0d4d68fd886c4645732e447ee"
+        },
+        "toolkit_parameters": {
+          "noise": "noise_snr_v1 at 20, 25, 30, or 35 dB SNR",
+          "reverb": "reverb_only_v1 profiles (room_size, wet, dry, damping): (0.25, 0.10, 0.90, 0.50), (0.45, 0.18, 0.82, 0.55), or (0.65, 0.25, 0.75, 0.60), all with width 1 and freeze 0",
+          "time": "time_stretch_v1 at rates 0.90, 0.95, 1.05, or 1.10 with synchronized MIDI",
+          "parameter_assignment": "one deterministic per-source view from each included family, selected from a stable SHA-derived seed under campaign seed 424242"
+        },
+        "control_revision": "d3197aafacbc176ddf1cb854ccb46648b019bb25",
+        "base_control_revision": "c219479911f641db6710a04c6d6f6dfab6bb1404",
+        "rt_selected_post_hoc": true,
+        "diversity_and_original_fraction_jointly_changed": true
+      },
+      "evaluation": {
+        "partition": "validation",
+        "recording_count": 137,
+        "aggregation": "macro_by_recording",
+        "segment_size_seconds": 16.0,
+        "segment_hop_seconds": 8.0,
+        "pedal_extension_applied": true,
+        "canonical_media_hashes_verified": true,
+        "canonical_records_sha256": "f3ecbd19657006e17560d66edb40eb8f2f4022efee33d43216b5f2b88833f918",
+        "validation_manifest_sha256": "71223bb536d37ad6b5e8d29d55cb258df75e947683847c212b9e0764fc95be07",
+        "validation_metadata_sha256": "e5a548b6ab2102014ebaf7849a2c909f756aa3dd4607f97dee847a57d068cb9b",
+        "test_media_or_labels_opened": false,
+        "checkpoint_search": false,
+        "reported_checkpoint": "fixed final update 50000 for both expanded-bundle arms",
+        "prediction_count_by_arm": {
+          "rt-expanded": 137,
+          "nrt-expanded": 137
+        },
+        "all_prediction_hashes_verified": true,
+        "recordings_sha256_by_arm": {
+          "rt-expanded": "46604d026b648a987609b91f93f31e394ab8dba6bced9e35beb9174697fb17c1",
+          "nrt-expanded": "6b1074be0f48a51f5df0a56100f8d764c79da4cfee94b35d133835e63b6a5d3f"
+        }
+      },
+      "arms": [
+        {
+          "id": "rt-expanded",
+          "label": "AMT-Augmentor expanded reverb plus time dataset",
+          "transform_families": ["reverb_only_v1", "time_stretch_v1"],
+          "description": "Physical dataset expansion with each source original plus one deterministic reverb audio version and one deterministic time-stretched audio version with synchronized MIDI, for 2886 distinct training entries.",
+          "logical_exposure": {
+            "original_metadata_fraction": 0.3333333333333333,
+            "reverb_only_v1_metadata_fraction": 0.3333333333333333,
+            "time_stretch_v1_metadata_fraction": 0.3333333333333333
+          }
+        },
+        {
+          "id": "nrt-expanded",
+          "label": "AMT-Augmentor expanded noise plus reverb plus time dataset",
+          "transform_families": ["noise_snr_v1", "reverb_only_v1", "time_stretch_v1"],
+          "description": "Physical dataset expansion with each source original plus one deterministic noise audio version, one deterministic reverb audio version, and one deterministic time-stretched audio version with synchronized MIDI, for 3848 distinct training entries.",
+          "logical_exposure": {
+            "original_metadata_fraction": 0.25,
+            "noise_snr_v1_metadata_fraction": 0.25,
+            "reverb_only_v1_metadata_fraction": 0.25,
+            "time_stretch_v1_metadata_fraction": 0.25
+          }
+        }
+      ],
+      "source_artifacts": [
+        {
+          "role": "expanded-bundle training launch protocol",
+          "locator": "launches/maestro-paper-v2-expanded-bundles-internal-v1-20260831-training/manifest.json",
+          "sha256": "b061da18a232ab6f1bb14fcf68223bd0072e0b42fcbe17fad6bc9bcf16d6bf7e",
+          "included": false
+        },
+        {
+          "role": "expanded-bundle training release receipt",
+          "locator": "launches/maestro-paper-v2-expanded-bundles-internal-v1-20260831-training/release.json",
+          "sha256": "15b999b029798ab8873fd0d40ecdbb994462b5c06edd6ea5cecf57a54d432677",
+          "included": false
+        },
+        {
+          "role": "expanded-bundle terminal verification receipt",
+          "locator": "launches/maestro-paper-v2-expanded-bundles-internal-v1-20260831-training/terminal-verification.json",
+          "sha256": "2c3e784440af84307cbc1aa996200d8623a955d7e8fa80c1ed61239254a6cfad",
+          "included": false
+        },
+        {
+          "role": "expanded-bundle loader memory receipt",
+          "locator": "launches/maestro-paper-v2-expanded-bundles-internal-v1-20260831-loader-preflight-retry1/memory-smoke-receipt.json",
+          "sha256": "dcc0836abfb845c6b4dc81e931418fe94fd6590a24d7609adb506bbb7604ba57",
+          "included": false
+        },
+        {
+          "role": "RT expanded metadata manifest",
+          "locator": "metadata/maestro-paper-v2-expanded-bundles-internal-v1-20260831/train-rt-expanded-manifest.json",
+          "sha256": "84939309fc9cd3699c024a0ebdcc7a0b2993b6a35cdaa29d472c708abedf4120",
+          "included": false
+        },
+        {
+          "role": "RT expanded metadata payload",
+          "locator": "metadata/maestro-paper-v2-expanded-bundles-internal-v1-20260831/train-rt-expanded.pickle",
+          "sha256": "13a6bf923a0bd1886fd273935af3449d34882de90b784cac009fdb38f547b3f2",
+          "included": false
+        },
+        {
+          "role": "NRT expanded metadata manifest",
+          "locator": "metadata/maestro-paper-v2-expanded-bundles-internal-v1-20260831/train-nrt-expanded-manifest.json",
+          "sha256": "dd7bebd20aa8f368c19d1061a4dbfe857b1061fe2f7df6733ff128243237a2e9",
+          "included": false
+        },
+        {
+          "role": "NRT expanded metadata payload",
+          "locator": "metadata/maestro-paper-v2-expanded-bundles-internal-v1-20260831/train-nrt-expanded.pickle",
+          "sha256": "c79afa6a7b5dfa25356c4a48cac3cd68e9cc3534a60d98df9593a07ca565741c",
+          "included": false
+        },
+        {
+          "role": "expanded-bundle validation metadata manifest",
+          "locator": "metadata/maestro-paper-v2-augmentation-internal-v1-20260826/validation-manifest.json",
+          "sha256": "71223bb536d37ad6b5e8d29d55cb258df75e947683847c212b9e0764fc95be07",
+          "included": false
+        },
+        {
+          "role": "expanded-bundle validation metadata payload",
+          "locator": "metadata/maestro-paper-v2-augmentation-internal-v1-20260826/validation.pickle",
+          "sha256": "e5a548b6ab2102014ebaf7849a2c909f756aa3dd4607f97dee847a57d068cb9b",
+          "included": false
+        },
+        {
+          "role": "RT expanded training result",
+          "locator": "runs/maestro-paper-v2-expanded-bundles-internal-v1-20260831/rt-expanded/result.json",
+          "sha256": "0d51baca4f326be68911a847270b19a83696853c39b56138905d9c1f843e3825",
+          "included": false
+        },
+        {
+          "role": "RT expanded final checkpoint",
+          "locator": "runs/maestro-paper-v2-expanded-bundles-internal-v1-20260831/rt-expanded/last.pt",
+          "sha256": "c87ed65d23cb78c5ac7136f36f0eb2332b67e353362bc29bc4efb4734d2fb75b",
+          "included": false
+        },
+        {
+          "role": "NRT expanded training result",
+          "locator": "runs/maestro-paper-v2-expanded-bundles-internal-v1-20260831/nrt-expanded/result.json",
+          "sha256": "83e818f8fc48673663069a68d731fa3f620323e0d4d68fd886c4645732e447ee",
+          "included": false
+        },
+        {
+          "role": "NRT expanded final checkpoint",
+          "locator": "runs/maestro-paper-v2-expanded-bundles-internal-v1-20260831/nrt-expanded/last.pt",
+          "sha256": "a3ab2d187b4ad0a15b4a9af7e79a37173b74d04102eb41493ad7f5b4b19269e5",
+          "included": false
+        }
+      ]
+    }
+  ],
+  "result_sets": [
+    {
+      "id": "maestro-validation-primary",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "description": "Full-precision recording-macro primary validation metrics. The paper-baseline row is an untouched checkpoint evaluation; the other rows are fixed-update fine-tuning results.",
+      "observations": [
+        {
+          "id": "paper-baseline",
+          "arm_id": "paper-baseline",
+          "checkpoint": {"label": "untouched-official-paper-checkpoint"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9816826530904008,
+            "recording_macro_onset_offset_f1": 0.932441981955764
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/paper-baseline/validation.json",
+            "sha256": "2d0dc30b1ab1070759266d49dd3360d93f7a67c5be60f56bc7e33c931f71a4c9",
+            "included": false
+          },
+          "notes": "Untouched official checkpoint; no fine-tuning was performed."
+        },
+        {
+          "id": "clean",
+          "arm_id": "clean",
+          "checkpoint": {"epoch": 4, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9816614478147303,
+            "recording_macro_onset_offset_f1": 0.9322854252174543
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/clean/validation.json",
+            "sha256": "637ba4cc457739dd3899bae622827e9c856d22e1b6b1f6078652e4cf1cb13a4d",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 4."
+        },
+        {
+          "id": "builtin",
+          "arm_id": "builtin",
+          "checkpoint": {"epoch": 4, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9792357943657011,
+            "recording_macro_onset_offset_f1": 0.923509606997237
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/builtin/validation.json",
+            "sha256": "7b8014c745c1f4b1306dbd299c3a2a34c30328ba2337768e69e8658d55438fe1",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 4."
+        },
+        {
+          "id": "noise",
+          "arm_id": "noise",
+          "checkpoint": {"epoch": 4, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.981678700714919,
+            "recording_macro_onset_offset_f1": 0.9320669956940891
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/noise/validation.json",
+            "sha256": "ead1c0429862c8a119d4d4b438a18ce83030289d45d33e2427b00a922bef37f7",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 4."
+        },
+        {
+          "id": "reverb",
+          "arm_id": "reverb",
+          "checkpoint": {"epoch": 4, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9817032120322566,
+            "recording_macro_onset_offset_f1": 0.9322743458926179
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/reverb/validation.json",
+            "sha256": "5b780e55eefacec31f06601e2961f7c457dc9748371ffcf1d892cc83094cfc58",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 4."
+        },
+        {
+          "id": "time",
+          "arm_id": "time",
+          "checkpoint": {"epoch": 4, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9815850579806292,
+            "recording_macro_onset_offset_f1": 0.932239119077584
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-augmentation-internal-v1-20260826/time/validation.json",
+            "sha256": "d847ca1221b18fa02237ccba2817828901df1c0220bd4dbbeb640099ff70ee27",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 4."
+        }
+      ]
+    },
+    {
+      "id": "maestro-expanded-bundle-validation-primary",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "description": "Full-precision recording-macro validation metrics for the fixed-final RT and NRT physical dataset-expansion checkpoints.",
+      "observations": [
+        {
+          "id": "rt-expanded",
+          "arm_id": "rt-expanded",
+          "checkpoint": {"epoch": 2, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9816605804254718,
+            "recording_macro_onset_offset_f1": 0.9322877381110631
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-expanded-bundles-internal-v1-20260831/rt-expanded/validation.json",
+            "sha256": "7bf1d1e6e99261a6876814e32799754a9f41369138a3426430d239e57a814b2f",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 2 and its recordings digest is 46604d026b648a987609b91f93f31e394ab8dba6bced9e35beb9174697fb17c1."
+        },
+        {
+          "id": "nrt-expanded",
+          "arm_id": "nrt-expanded",
+          "checkpoint": {"epoch": 2, "optimizer_step": 50000, "label": "fixed-final"},
+          "metrics": {
+            "recording_macro_onset_f1": 0.9816149843649851,
+            "recording_macro_onset_offset_f1": 0.9320641948953048
+          },
+          "artifact": {
+            "role": "canonical validation result",
+            "locator": "evaluations/maestro-paper-v2-expanded-bundles-internal-v1-20260831/nrt-expanded/validation.json",
+            "sha256": "d254c872025159609e626bd6ed9832ac2f20bea42309ae7b1427dc53e1d9aa06",
+            "included": false
+          },
+          "notes": "Fixed final checkpoint; the artifact's checkpoint_epoch field is 2 and its recordings digest is 6b1074be0f48a51f5df0a56100f8d764c79da4cfee94b35d133835e63b6a5d3f."
+        }
+      ]
+    }
+  ],
+  "derived_results": [
+    {
+      "id": "paper-baseline-minus-clean",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "paper-baseline - clean",
+      "observation_ids": ["paper-baseline", "clean"],
+      "values": {"recording_macro_onset_f1": 0.00002120527567051056, "recording_macro_onset_offset_f1": 0.00015655673830972106},
+      "interpretation": "The untouched official checkpoint was descriptively close to, and slightly above, the clean fine-tuned control."
+    },
+    {
+      "id": "builtin-minus-clean",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "builtin - clean",
+      "observation_ids": ["builtin", "clean"],
+      "values": {"recording_macro_onset_f1": -0.0024256534490292303, "recording_macro_onset_offset_f1": -0.008775818220217224},
+      "interpretation": "The shipped built-in bundle was lower than clean on both primary metrics in this fixed run."
+    },
+    {
+      "id": "noise-minus-clean",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "noise - clean",
+      "observation_ids": ["noise", "clean"],
+      "values": {"recording_macro_onset_f1": 0.000017252900188724496, "recording_macro_onset_offset_f1": -0.00021842952336514898},
+      "interpretation": "Noise was nearly tied with clean, with a slightly higher onset score and lower onset-plus-offset score."
+    },
+    {
+      "id": "reverb-minus-clean",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "reverb - clean",
+      "observation_ids": ["reverb", "clean"],
+      "values": {"recording_macro_onset_f1": 0.00004176421752632997, "recording_macro_onset_offset_f1": -0.000011079324836349436},
+      "interpretation": "Reverb was nearly tied with clean, with the highest onset score and a slightly lower onset-plus-offset score."
+    },
+    {
+      "id": "time-minus-clean",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "time - clean",
+      "observation_ids": ["time", "clean"],
+      "values": {"recording_macro_onset_f1": -0.00007638983410107603, "recording_macro_onset_offset_f1": -0.000046306139870222474},
+      "interpretation": "Time stretch was slightly lower than clean on both primary metrics."
+    },
+    {
+      "id": "paper-baseline-minus-builtin",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "paper-baseline - builtin",
+      "observation_ids": ["paper-baseline", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.002446858724699741, "recording_macro_onset_offset_f1": 0.008932374958526945},
+      "interpretation": "The untouched official checkpoint exceeded the built-in augmentation arm on both metrics."
+    },
+    {
+      "id": "clean-minus-builtin",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "clean - builtin",
+      "observation_ids": ["clean", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.0024256534490292303, "recording_macro_onset_offset_f1": 0.008775818220217224},
+      "interpretation": "The clean fine-tuning control exceeded the built-in augmentation arm on both metrics."
+    },
+    {
+      "id": "noise-minus-builtin",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "noise - builtin",
+      "observation_ids": ["noise", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.002442906349217955, "recording_macro_onset_offset_f1": 0.008557388696852075},
+      "interpretation": "The fixed noise arm exceeded the built-in augmentation arm on both metrics."
+    },
+    {
+      "id": "reverb-minus-builtin",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "reverb - builtin",
+      "observation_ids": ["reverb", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.0024674176665555603, "recording_macro_onset_offset_f1": 0.008764738895380875},
+      "interpretation": "The fixed reverb arm exceeded the built-in augmentation arm on both metrics."
+    },
+    {
+      "id": "time-minus-builtin",
+      "protocol_id": "maestro-transkun-50k-finetune",
+      "kind": "difference",
+      "formula": "time - builtin",
+      "observation_ids": ["time", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.0023492636149281543, "recording_macro_onset_offset_f1": 0.008729512080347002},
+      "interpretation": "The fixed time-stretch arm exceeded the built-in augmentation arm on both metrics."
+    },
+    {
+      "id": "rt-expanded-minus-clean",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "kind": "difference",
+      "formula": "rt-expanded - clean",
+      "observation_ids": ["rt-expanded", "clean"],
+      "values": {"recording_macro_onset_f1": -8.673892585298049e-07, "recording_macro_onset_offset_f1": 2.312893608857891e-06},
+      "interpretation": "The RT physical dataset expansion was effectively tied with clean: onset was lower by less than one millionth and onset-plus-offset was higher by about two millionths."
+    },
+    {
+      "id": "nrt-expanded-minus-clean",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "kind": "difference",
+      "formula": "nrt-expanded - clean",
+      "observation_ids": ["nrt-expanded", "clean"],
+      "values": {"recording_macro_onset_f1": -0.00004646344974523764, "recording_macro_onset_offset_f1": -0.00022123032214949045},
+      "interpretation": "The NRT physical dataset expansion was slightly lower than clean on both primary metrics."
+    },
+    {
+      "id": "rt-expanded-minus-builtin",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "kind": "difference",
+      "formula": "rt-expanded - builtin",
+      "observation_ids": ["rt-expanded", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.0024247860597707005, "recording_macro_onset_offset_f1": 0.008778131113826082},
+      "interpretation": "The RT physical dataset expansion exceeded the Transkun built-in augmentation arm on both primary metrics."
+    },
+    {
+      "id": "nrt-expanded-minus-builtin",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "kind": "difference",
+      "formula": "nrt-expanded - builtin",
+      "observation_ids": ["nrt-expanded", "builtin"],
+      "values": {"recording_macro_onset_f1": 0.0023791899992839927, "recording_macro_onset_offset_f1": 0.008554587898067734},
+      "interpretation": "The NRT physical dataset expansion exceeded the Transkun built-in augmentation arm on both primary metrics."
+    },
+    {
+      "id": "nrt-expanded-minus-rt-expanded",
+      "protocol_id": "maestro-transkun-expanded-bundles-50k",
+      "kind": "difference",
+      "formula": "nrt-expanded - rt-expanded",
+      "observation_ids": ["nrt-expanded", "rt-expanded"],
+      "values": {"recording_macro_onset_f1": -0.000045596060486707835, "recording_macro_onset_offset_f1": -0.00022354321575834835},
+      "interpretation": "NRT was slightly lower than RT in this direct bundle contrast. This is not an isolated noise effect: adding the noise view also dilutes the original, reverb, and time-stretch fractions."
+    }
+  ],
+  "interpretations": [
+    "The local evaluation of the untouched official checkpoint was healthy and the clean 50000-update control remained extremely close to it, so the fine-tuning pipeline did not create a broad performance collapse.",
+    "None of the three fixed single-family toolkit arms improved both primary metrics over clean. Their differences from clean were small and mixed, with reverb highest on onset F1 and clean highest on onset-plus-offset F1 among the fine-tuned non-builtin arms.",
+    "All three fixed toolkit arms exceeded the Transkun built-in bundle on both primary metrics, but the designs are not component-matched: the built-in condition is a stochastic four-effect bundle and the toolkit conditions are deterministic 50/50 single-family mixtures.",
+    "The RT physical dataset expansion was effectively tied with clean, while NRT was slightly lower than clean on both primary metrics. Neither expanded bundle establishes an improvement over clean; both nevertheless exceeded the built-in arm on both metrics.",
+    "The expanded-bundle follow-up demonstrates a reproducible dataset-expansion mode in which deterministic audio and synchronized MIDI versions are added alongside every original song. Its value here is explicit, auditable view composition and exposure, not a claim of a MAESTRO score gain.",
+    "Together with the Galdr reference, this result argues for explicit, dataset- and model-specific controls rather than a universal augmentation recipe. AMT-Augmentor contributes reproducible paired interventions and family-level reference evidence that can be tested separately from a model's bundled augmentation."
+  ],
+  "limitations": [
+    "Every fine-tuning result uses one initialization and data-order seed, 424242.",
+    "This is mature-checkpoint fine-tuning for 50000 updates, not training from scratch and not a reproduction of the paper's 500000-update training schedule.",
+    "The Transkun built-in arm combines random stereo downmix, small detuning, seven-band equalization, and Gaussian noise on the fly, whereas each toolkit arm uses a fixed 50/50 single-family metadata mixture. The comparison therefore cannot attribute the built-in arm's difference to one component or to toolkit-versus-native implementation alone.",
+    "RT was selected post hoc from the prior single-family evidence, and no pitch-expanded arm was possible because no pitch materialization existed. Its point result is descriptive follow-up evidence, not a prespecified confirmatory test.",
+    "RT and NRT jointly change the number of distinct views and the fraction of scheduled draws assigned to originals and every shared transform. NRT minus RT therefore cannot be interpreted as an isolated effect of adding noise.",
+    "The expanded arms hold optimizer updates and effective batch size fixed, not epochs or per-component exposure. Their 600000 optimizer-consumed draws are the relevant fixed-compute exposure; unconsumed worker prefetch is excluded.",
+    "No significance test, repeated-seed interval, or paired bootstrap interval was computed; especially small point differences among clean and toolkit arms should not be treated as established rankings.",
+    "All claims are validation-only over 137 recordings. Test audio and labels were not opened.",
+    "Training, checkpoint, and canonical evaluation artifacts are identified by locator and SHA-256 but are not redistributed in this package."
+  ],
+  "provenance": {
+    "compiled_date": "2026-08-31",
+    "source_project": "MAESTRO Transkun augmentation internal reference experiment",
+    "artifact_hash_algorithm": "sha256",
+    "canonical_artifacts_included": false,
+    "verification": "All eight primary rows were copied at full precision from completed pedal-extended validation.json artifacts. The result files, model configuration, untouched and fine-tuned checkpoints, training and validation metadata, launch and release manifests, loader memory receipt, and expanded-bundle terminal verification receipt were independently bound by SHA-256. The terminal audit verified all 137 prediction hashes for each expanded arm; no test media or labels were accessed."
+  }
+}

@@ -1,0 +1,426 @@
+{
+  "$schema": "./schema-v1.json",
+  "schema_version": 1,
+  "kind": "amt_augmentor_research_reference",
+  "reference_id": "galdr-hardanger-v1",
+  "status": "complete",
+  "title": "Galdr Hardanger fiddle augmentation validation results",
+  "summary": "Completed epoch-150 results from the prespecified original-versus-conventional checkpoint campaign, plus fixed-checkpoint leave-one-family-out, targeted successor, preference, recipe, and late-training interaction experiments with the compact Galdr AMT model.",
+  "package_policy": {
+    "changes_runtime_defaults": false,
+    "recipe_status": "dataset_specific_evidence",
+    "guidance": [
+      "Use these results to form hypotheses for a corpus with similar recording and instrument characteristics.",
+      "Choose transform strengths and exposure schedules for the target corpus and validate them on untouched held-out source groups.",
+      "Do not treat the best Galdr arm as an AMT-Augmentor package default."
+    ]
+  },
+  "scope": {
+    "evidence_level": "single_seed_validation",
+    "dataset": "hf2-group-v2",
+    "domain": "historical and contemporary Hardanger fiddle recordings",
+    "training_source_count": 107,
+    "validation_units": {
+      "kind": "tune-disjoint canonical tunes",
+      "count": 6
+    },
+    "random_seeds": [424242],
+    "selection_partition": "validation",
+    "test_data_accessed": false,
+    "checkpoint_selection": "The O/C campaign evaluated 30 prespecified candidate epochs with a fixed winner rule; this card reports its fixed epoch-150 rows. All other result sets report their protocol-specified fixed epochs without checkpoint search.",
+    "publication_status": "manuscript in preparation"
+  },
+  "artifact_bases": [
+    {
+      "id": "galdr-protocol-source",
+      "kind": "git_repository",
+      "uri": "git@github.com:LarsMonstad/galdr-sigma2.git",
+      "revision": "fa8028e13b90145c569624a1162ccfd3e46186a1",
+      "availability": "unpublished",
+      "locator_prefixes": ["configs/"],
+      "immutability": "Every listed config resolves under this exact local Git revision and is additionally bound by its per-artifact SHA-256. The revision is not currently reachable from a public remote."
+    },
+    {
+      "id": "galdr-runtime-artifacts",
+      "kind": "logical_artifact_root",
+      "uri": "galdr-artifact://galdr-sigma2-runtime/",
+      "revision": null,
+      "availability": "unpublished",
+      "locator_prefixes": ["runs/", "evaluations/", "summaries/"],
+      "immutability": "The runtime store is not redistributed; each locator is immutable for this card through its required per-artifact SHA-256."
+    }
+  ],
+  "software_provenance": [
+    {
+      "name": "Galdr",
+      "role": "Protocol control source",
+      "revision": "fa8028e13b90145c569624a1162ccfd3e46186a1",
+      "revision_scope": "This local, currently unpublished control revision contains byte-identical copies of every listed protocol config; it is a reconstruction/audit binding, not a claim that every historical run executed from this one revision."
+    },
+    {
+      "name": "AMT-Augmentor",
+      "role": "Paired augmentation materialization",
+      "revision": null,
+      "revision_scope": "The Galdr protocols span evolving source trees, so this card does not invent one historical AMT-Augmentor revision. Exact runtime and materialization source bindings remain in the hash-bound upstream protocol and completion artifacts."
+    }
+  ],
+  "metric_definitions": [
+    {
+      "id": "tune_macro_onset_f1",
+      "label": "Onset F1",
+      "unit": "fraction",
+      "aggregation": "macro mean over six tunes against untouched canonical expert MIDI",
+      "range": [0.0, 1.0]
+    },
+    {
+      "id": "tune_macro_onset_offset_f1",
+      "label": "Onset plus offset F1",
+      "unit": "fraction",
+      "aggregation": "macro mean over six tunes against untouched canonical expert MIDI",
+      "range": [0.0, 1.0]
+    }
+  ],
+  "protocols": [
+    {
+      "id": "compact-original-vs-conventional-e150",
+      "question": "Does the conventional six-view augmentation package improve the compact model over original-only training at the same fixed training horizon?",
+      "design": "Both arms use seed 424242, 150 epochs, 36000 optimizer updates, the same source-disjoint split, and the same evaluation. The update budget is matched; O repeatedly samples originals while C samples one original and five transformed logical views. The campaign evaluated 30 prespecified candidates at five-epoch intervals; the observations in this card are the fixed epoch-150 rows, not winner-selected scores.",
+      "model": {
+        "name": "Galdr compact",
+        "parameters": 2524335,
+        "configuration_sha256": "1200896ea199f457ed5805c373ba32562698df8fa356cfb7380361981a4c110a"
+      },
+      "training": {
+        "seed": 424242,
+        "epochs": 150,
+        "optimizer_steps": 36000,
+        "optimizer_steps_per_epoch": 240,
+        "effective_batch_size": 80,
+        "chunk_seconds": 16.0
+      },
+      "evaluation": {
+        "partition": "validation",
+        "reported_epoch": 150,
+        "reported_row_role": "fixed epoch-150 member of the prespecified candidate grid",
+        "candidate_epochs": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150],
+        "winner_rule": ["highest full-precision tune-macro onset-plus-offset F1", "exact tie: highest full-precision tune-macro onset-only F1", "exact tie: earliest optimizer update"],
+        "test_inference": false
+      },
+      "arms": [
+        {
+          "id": "o",
+          "label": "Original-only",
+          "transform_families": [],
+          "description": "Original recordings only."
+        },
+        {
+          "id": "c",
+          "label": "Full conventional package",
+          "transform_families": ["gain_chorus_v1", "noise_snr_v1", "reverb_filters_v1", "pitch_shift_v1", "time_stretch_v1"],
+          "description": "One original logical view plus one view from each of five conventional transform families.",
+          "logical_exposure": {
+            "original": 1,
+            "gain_chorus_v1": 1,
+            "noise_snr_v1": 1,
+            "reverb_filters_v1": 1,
+            "pitch_shift_v1": 1,
+            "time_stretch_v1": 1
+          }
+        }
+      ],
+      "source_artifacts": [
+        {
+          "role": "training protocol",
+          "locator": "configs/training/compact-oc-s424242-e150-v1.json",
+          "sha256": "d1bb8cdc70801fa84d3d9ed65d8fc26e18c04819803e51793d38527080e1d40c",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "conventional-lofo-e150",
+      "question": "Which family contributes inside the dense conventional package?",
+      "design": "Each omitted-family arm replaces that family's logical slot with the original view. Source, window, logical-slot draw count, optimizer updates, initialization seed, and evaluation are controlled. The contrast is conditional on the remaining dense package.",
+      "model": {
+        "name": "Galdr compact",
+        "parameters": 2524335
+      },
+      "training": {
+        "seed": 424242,
+        "epochs": 150,
+        "optimizer_steps": 36000,
+        "logical_views": 6
+      },
+      "evaluation": {
+        "partition": "validation",
+        "fixed_epoch": 150,
+        "checkpoint_search": false,
+        "test_inference": false
+      },
+      "arms": [
+        {"id": "c-full", "label": "Full conventional package", "transform_families": ["gain_chorus_v1", "noise_snr_v1", "reverb_filters_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "The six-view conventional reference."},
+        {"id": "c-minus-gain-chorus", "label": "Minus gain/chorus", "transform_families": ["noise_snr_v1", "reverb_filters_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "Gain/chorus slot replaced by original."},
+        {"id": "c-minus-noise", "label": "Minus Gaussian noise", "transform_families": ["gain_chorus_v1", "reverb_filters_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "Generic Gaussian-noise slot replaced by original."},
+        {"id": "c-minus-reverb-filters", "label": "Minus reverb/filters", "transform_families": ["gain_chorus_v1", "noise_snr_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "Combined reverb/filter slot replaced by original."},
+        {"id": "c-minus-pitch-shift", "label": "Minus pitch shift", "transform_families": ["gain_chorus_v1", "noise_snr_v1", "reverb_filters_v1", "time_stretch_v1"], "description": "Pitch-shift slot replaced by original."},
+        {"id": "c-minus-time-stretch", "label": "Minus time stretch", "transform_families": ["gain_chorus_v1", "noise_snr_v1", "reverb_filters_v1", "pitch_shift_v1"], "description": "Global time-stretch slot replaced by original."}
+      ],
+      "source_artifacts": [
+        {
+          "role": "base ablation protocol",
+          "locator": "configs/training/augmentation-ablation-lofo-s424242-e100-v2.json",
+          "sha256": "2e617bb217baef312bf862abc8477c0d25a7b1d338421dfa1dcc92dffb3432a1",
+          "included": false
+        },
+        {
+          "role": "epoch-150 extension protocol",
+          "locator": "configs/training/augmentation-ablation-lofo-s424242-e150-extension-v1.json",
+          "sha256": "3efbb4fcb33b139623dd3b20e7de7aedd0b78f614abd996d66c6c0dc0ca294a3",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "successor-methods-e100-e150",
+      "question": "Does archival noise/hum or fractional detuning improve on its slot-matched omitted-family control?",
+      "design": "Each candidate replaces only the duplicated-original slot in its paired leave-one-family-out control. Source, window, and logical-slot draws are identical within each pair, with six views and a fixed update budget.",
+      "model": {"name": "Galdr compact", "parameters": 2524335},
+      "training": {"seed": 424242, "epochs": 150, "optimizer_steps": 36000, "logical_views": 6},
+      "evaluation": {"partition": "validation", "fixed_epochs": [100, 150], "checkpoint_search": false, "test_inference": false},
+      "arms": [
+        {"id": "archival-noise", "label": "Archival noise/hum", "transform_families": ["archival_noise_v1"], "description": "Configurable coloured noise and harmonic mains hum replacing the missing generic-noise slot."},
+        {"id": "fractional-detuning", "label": "Fractional detuning", "transform_families": ["fractional_detuning_v1"], "description": "Sub-semitone audio detuning with unchanged symbolic pitches replacing the missing gain/chorus slot."}
+      ],
+      "source_artifacts": [
+        {
+          "role": "training protocol",
+          "locator": "configs/training/successor-augmentation-s424242-e150-v1.json",
+          "sha256": "65d924d62d00a6948400bc11765167313576d4c7ee89555e6d4e055d7ab1cf62",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "preference-screen-e100-e150",
+      "question": "Which pitch, reverb, or time-variation treatment is most promising when total source/window/logical-slot exposure is held fixed?",
+      "design": "Every arm has 72 logical slots and 2880000 total draws. The p1 control has 48 original, 12 archival-noise, and 12 legacy-pitch slots. Pitch arms replace the 12 pitch slots. RF, reverb, and time arms replace 12 of p1's 48 original slots, leaving 36 original, 12 archival-noise, 12 legacy-pitch, and 12 treatment slots. This controls the number of changed logical slots, total draws, and optimizer steps; pitch-grid substitution and adding a new family still answer different questions.",
+      "model": {"name": "Galdr compact", "parameters": 2524335},
+      "training": {"seed": 424242, "epochs": 150, "optimizer_steps": 36000, "total_draws": 2880000, "logical_slots": 72},
+      "evaluation": {"partition": "validation", "fixed_epochs": [100, 150], "checkpoint_search": false, "test_inference": false},
+      "arms": [
+        {"id": "p1", "label": "Legacy pitch control", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "48 original, 12 archival-noise, and 12 legacy-pitch slots.", "logical_exposure": {"original": 48, "archival_noise_v1": 12, "pitch_shift_v1": 12}},
+        {"id": "p4", "label": "Pitch +/-1, +/-2", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "The 12 pitch slots are balanced across -2, -1, +1, and +2 semitones.", "logical_exposure": {"original": 48, "archival_noise_v1": 12, "pitch_shift_v1": 12}},
+        {"id": "p4-wide", "label": "Pitch +/-1, +/-6", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "The 12 pitch slots are balanced across -6, -1, +1, and +6 semitones.", "logical_exposure": {"original": 48, "archival_noise_v1": 12, "pitch_shift_v1": 12}},
+        {"id": "p12", "label": "Pitch every semitone +/-1 through +/-6", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "Each of the 12 non-zero shifts from -6 through +6 occupies one pitch slot.", "logical_exposure": {"original": 48, "archival_noise_v1": 12, "pitch_shift_v1": 12}},
+        {"id": "rf", "label": "Combined reverb and filters", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "reverb_filters_v1"], "description": "Twelve of the 48 original slots are replaced by the legacy combined reverb plus high/low-pass-filter view.", "logical_exposure": {"original": 36, "archival_noise_v1": 12, "pitch_shift_v1": 12, "reverb_filters_v1": 12}},
+        {"id": "r-moderate", "label": "Moderate reverb", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "reverb_only_v1"], "description": "Twelve of the 48 original slots are replaced by moderate reverb-only views.", "logical_exposure": {"original": 36, "archival_noise_v1": 12, "pitch_shift_v1": 12, "reverb_only_v1": 12}},
+        {"id": "r-strong", "label": "Strong reverb", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "reverb_only_v1"], "description": "Twelve of the 48 original slots are replaced by strong reverb-only views.", "logical_exposure": {"original": 36, "archival_noise_v1": 12, "pitch_shift_v1": 12, "reverb_only_v1": 12}},
+        {"id": "t-global", "label": "Global time stretch", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "Twelve of the 48 original slots are replaced by whole-recording time-stretch views.", "logical_exposure": {"original": 36, "archival_noise_v1": 12, "pitch_shift_v1": 12, "time_stretch_v1": 12}},
+        {"id": "t-local", "label": "Local time warp", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "local_time_warp_v1"], "description": "Twelve of the 48 original slots are replaced by locally varying monotonic time-warp views.", "logical_exposure": {"original": 36, "archival_noise_v1": 12, "pitch_shift_v1": 12, "local_time_warp_v1": 12}}
+      ],
+      "source_artifacts": [
+        {
+          "role": "training protocol",
+          "locator": "configs/training/augmentation-preference-screen-s424242-e150-v1.json",
+          "sha256": "c99fe3e150e63118d3a61646328c9ac634c41c49577e9447bba8c92738320a28",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "archival-pitch-detuning-e100-e150",
+      "question": "Does fractional detuning improve the archival-noise plus pitch recipe?",
+      "design": "AP and APD use identical source/window/logical-slot streams, six logical slots, the same initialization seed, and the same fixed training horizon. APD changes exactly one original slot to fractional detuning.",
+      "model": {"name": "Galdr compact", "parameters": 2524335},
+      "training": {"seed": 424242, "epochs": 150, "optimizer_steps": 36000, "logical_slots": 6},
+      "evaluation": {"partition": "validation", "fixed_epochs": [100, 150], "checkpoint_search": false, "test_inference": false},
+      "arms": [
+        {"id": "ap", "label": "Archival plus pitch", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "Four original, one archival-noise, and one pitch-shift logical slot.", "logical_exposure": {"original": 4, "archival_noise_v1": 1, "pitch_shift_v1": 1}},
+        {"id": "apd", "label": "Archival plus pitch plus detuning", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "fractional_detuning_v1"], "description": "Three original, one archival-noise, one pitch-shift, and one fractional-detuning logical slot.", "logical_exposure": {"original": 3, "archival_noise_v1": 1, "pitch_shift_v1": 1, "fractional_detuning_v1": 1}}
+      ],
+      "source_artifacts": [
+        {
+          "role": "training protocol",
+          "locator": "configs/training/recommended-augmentation-ap-apd-s424242-e150-v1.json",
+          "sha256": "63ecca7cf77155387de018ab0e034cc493e8c3cc28a2d9d0063775fd401fdafc",
+          "included": false
+        }
+      ]
+    },
+    {
+      "id": "rf-global-stretch-late-interaction",
+      "question": "Do combined reverb/filter and global-stretch exposures interact after a shared p1 checkpoint?",
+      "design": "All cells share p1 training through epoch 100. During epochs 101-150, RF and global-stretch treatments resolve on separate logical-slot draws. This is a post-hoc descriptive two-by-two contrast, not a full-course or same-draw composition effect.",
+      "model": {"name": "Galdr compact", "parameters": 2524335},
+      "training": {"seed": 424242, "shared_control_epochs": 100, "treatment_epochs": 50, "final_epoch": 150},
+      "evaluation": {"partition": "validation", "fixed_epoch": 150, "checkpoint_search": false, "test_inference": false},
+      "arms": [
+        {"id": "interaction-control", "label": "Control", "transform_families": ["archival_noise_v1", "pitch_shift_v1"], "description": "The p1 epoch-150 reference."},
+        {"id": "rf-a", "label": "RF exposure", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "reverb_filters_v1"], "description": "RF treatment on its assigned draws during epochs 101-150."},
+        {"id": "ts-b", "label": "Global-stretch exposure", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "time_stretch_v1"], "description": "Global-stretch treatment on its assigned draws during epochs 101-150."},
+        {"id": "rf-a-ts-b", "label": "RF and global-stretch exposures", "transform_families": ["archival_noise_v1", "pitch_shift_v1", "reverb_filters_v1", "time_stretch_v1"], "description": "Both treatment slots active on separate draws during epochs 101-150."}
+      ],
+      "source_artifacts": [
+        {
+          "role": "interaction protocol",
+          "locator": "configs/training/augmentation-interaction-followup-s424242-e150-v1.json",
+          "sha256": "30c5eeca329c2d6ad5632802139e09713441bb12d4a5b87bd753ec637b2fdb55",
+          "included": false
+        },
+        {
+          "role": "completed interaction summary",
+          "locator": "summaries/augmentation-interaction-followup-s424242-e150-v1/interaction-rf-ts-late-e150-s424242-v1-retry2-20260826/interaction-summary.json",
+          "sha256": "beb927edd7448bb0215b5c519adfddc9a444ae7ad170d634d65fb842756169da",
+          "included": false
+        }
+      ]
+    }
+  ],
+  "result_sets": [
+    {
+      "id": "original-vs-conventional",
+      "protocol_id": "compact-original-vs-conventional-e150",
+      "description": "Fixed epoch-150 original-only and conventional-package results.",
+      "observations": [
+        {
+          "id": "o-e150",
+          "arm_id": "o",
+          "checkpoint": {"epoch": 150, "optimizer_step": 36000},
+          "metrics": {"tune_macro_onset_f1": 0.9060370717264375, "tune_macro_onset_offset_f1": 0.8467086488723599},
+          "artifact": {"role": "canonical validation result", "locator": "runs/compact-oc-s424242-e150-v1/O/candidate-validation-attempt-1/candidate-e0150-step-00036000/canonical-validation.json", "sha256": "d727da128c45cc61df6b45c2508eda0202a799bc7fdadc6fc49fcfb5d20fe021", "included": false}
+        },
+        {
+          "id": "c-e150",
+          "arm_id": "c",
+          "checkpoint": {"epoch": 150, "optimizer_step": 36000},
+          "metrics": {"tune_macro_onset_f1": 0.9237362734187363, "tune_macro_onset_offset_f1": 0.8629264454975775},
+          "artifact": {"role": "canonical validation result", "locator": "runs/compact-oc-s424242-e150-v1/C/candidate-validation-attempt-2/candidate-e0150-step-00036000/canonical-validation.json", "sha256": "699ff492b6748bd6a0277d37a943fc9076b3190cc9cc5e0f5f99cf9bb9b9127d", "included": false}
+        }
+      ]
+    },
+    {
+      "id": "conventional-lofo",
+      "protocol_id": "conventional-lofo-e150",
+      "description": "Fixed epoch-150 leave-one-family-out results; omitted slots are replaced by originals.",
+      "observations": [
+        {"id": "lofo-c-full-e150", "arm_id": "c-full", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9237362734187363, "tune_macro_onset_offset_f1": 0.8629264454975775}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-full/validation-e0150-step-00036000/canonical-validation.json", "sha256": "5f1a7e9fc4a2c96b053ee440e67147a27a7e62736176de5aae070538bbfc0729", "included": false}},
+        {"id": "lofo-minus-gain-chorus-e150", "arm_id": "c-minus-gain-chorus", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9241142687711347, "tune_macro_onset_offset_f1": 0.8667254116917955}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-minus-gain-chorus/validation-e0150-step-00036000/canonical-validation.json", "sha256": "0ed3dac3f4e2b0ce80029e30af7b8803efd3be5da2460b928e28bedf4ac7b7da", "included": false}},
+        {"id": "lofo-minus-noise-e150", "arm_id": "c-minus-noise", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9195406735812982, "tune_macro_onset_offset_f1": 0.8645739559413671}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-minus-noise/validation-e0150-step-00036000/canonical-validation.json", "sha256": "0e4e75aa97c2bd74b986d2fcad849575594fc1fdb6781ef02f26e171876816be", "included": false}},
+        {"id": "lofo-minus-reverb-filters-e150", "arm_id": "c-minus-reverb-filters", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9260753730542626, "tune_macro_onset_offset_f1": 0.8686766381532459}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-minus-reverb-filters/validation-e0150-step-00036000/canonical-validation.json", "sha256": "21062c693fa0f1b11cbdf257a73f15a67434f8b5dd501846ae94dc56d5dbeb47", "included": false}},
+        {"id": "lofo-minus-pitch-shift-e150", "arm_id": "c-minus-pitch-shift", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9081326977294631, "tune_macro_onset_offset_f1": 0.852915819740796}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-minus-pitch-shift/validation-e0150-step-00036000/canonical-validation.json", "sha256": "f45f93eea6161acb91654179b51e37b7cc0b007432aa3863a945b919c7109488", "included": false}},
+        {"id": "lofo-minus-time-stretch-e150", "arm_id": "c-minus-time-stretch", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9234113343703373, "tune_macro_onset_offset_f1": 0.8677682114863235}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-ablation-lofo-s424242-e150-recovered-v3/c-minus-time-stretch/validation-e0150-step-00036000/canonical-validation.json", "sha256": "274f4de448d371add280cacb99fd4b680aef1a7ce7e3096731e76355d9a108b6", "included": false}}
+      ]
+    },
+    {
+      "id": "successor-methods",
+      "protocol_id": "successor-methods-e100-e150",
+      "description": "Fixed epoch-100 and epoch-150 observations for the two successor methods.",
+      "observations": [
+        {"id": "archival-noise-e100", "arm_id": "archival-noise", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9227097959441829, "tune_macro_onset_offset_f1": 0.8628357704579117}, "artifact": {"role": "canonical validation result", "locator": "evaluations/successor-augmentation-s424242-e150-v1/archival-noise/e100/validation-e0100-step-00024000/canonical-validation.json", "sha256": "33f5450ff6a96ce36b801f52727ae0c6428cc826d1cf5d35e3257fb57bf12964", "included": false}},
+        {"id": "archival-noise-e150", "arm_id": "archival-noise", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9280128756942408, "tune_macro_onset_offset_f1": 0.8749630986874856}, "artifact": {"role": "canonical validation result", "locator": "evaluations/successor-augmentation-s424242-e150-v1/archival-noise/e150/validation-e0150-step-00036000/canonical-validation.json", "sha256": "bd507e566d968666923b76e7432e28c7ee12a2924333df4b8dbdd86d80dfbf35", "included": false}},
+        {"id": "fractional-detuning-e100", "arm_id": "fractional-detuning", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.91860869168436, "tune_macro_onset_offset_f1": 0.8616182811806156}, "artifact": {"role": "canonical validation result", "locator": "evaluations/successor-augmentation-s424242-e150-v1/fractional-detuning/e100/validation-e0100-step-00024000/canonical-validation.json", "sha256": "5f32d3af82df48689c518b481fa5a14f73f0ebfe069b40e0703b501730bede31", "included": false}},
+        {"id": "fractional-detuning-e150", "arm_id": "fractional-detuning", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9233150590369714, "tune_macro_onset_offset_f1": 0.8680914960052587}, "artifact": {"role": "canonical validation result", "locator": "evaluations/successor-augmentation-s424242-e150-v1/fractional-detuning/e150/validation-e0150-step-00036000/canonical-validation.json", "sha256": "ca4e121a9f900a65fad7b72ea5a595922aedab296bc0d780d49d74b5d584e669", "included": false}}
+      ]
+    },
+    {
+      "id": "preference-screen",
+      "protocol_id": "preference-screen-e100-e150",
+      "description": "All nine matched preference arms at fixed epochs 100 and 150.",
+      "observations": [
+        {"id": "p1-e100", "arm_id": "p1", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9120342312398041, "tune_macro_onset_offset_f1": 0.8466270593650083}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/p1-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "1fa3d7dabd60215b33f7b5b730dba41754c65fde5c20324f73f0463d550387cb", "included": false}},
+        {"id": "p4-e100", "arm_id": "p4", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9167870971671603, "tune_macro_onset_offset_f1": 0.8585585316639616}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/p4-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "5a8f18d2ab22a906d750633ae5dc14bb3eb00b54fe67e3e4d650996145d7427e", "included": false}},
+        {"id": "p4-wide-e100", "arm_id": "p4-wide", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9129300704313779, "tune_macro_onset_offset_f1": 0.8488283382493651}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/p4-wide-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "1d1b657ab0116ca1051d77df08af9047e7174a621268c8f1f3ff7d38b66f3ede", "included": false}},
+        {"id": "p12-e100", "arm_id": "p12", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9178233985535179, "tune_macro_onset_offset_f1": 0.8570611544881577}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/p12-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "e7dbc0390001b67d9e65cef60e659b4c130377ce506a0f593327e920868454db", "included": false}},
+        {"id": "rf-e100", "arm_id": "rf", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9182735835529797, "tune_macro_onset_offset_f1": 0.8569448050988212}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-rf-recovery-s424242-e100-v1/rf-rf-fsretry3-20260820/e100/validation/canonical-validation.json", "sha256": "b410e9c24e7579b87f4996f3359fc9a60b2dd6e748ce78a6d2a38479503c736f", "included": false}},
+        {"id": "r-moderate-e100", "arm_id": "r-moderate", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9120739957674445, "tune_macro_onset_offset_f1": 0.8460763488739204}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-rf-recovery-s424242-e100-v1/r-moderate-rf-fsretry3-20260820/e100/validation/canonical-validation.json", "sha256": "f868051e98c4825babc5b4d021460d39abb1220a5263b1d0528bb2389ee22347", "included": false}},
+        {"id": "r-strong-e100", "arm_id": "r-strong", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9204937046694234, "tune_macro_onset_offset_f1": 0.8614018630018174}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/r-strong-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "ccfa2d78f5b7fe009a7e82f6b2e133e308a36ec66eef4a1a7e26d4ce23578132", "included": false}},
+        {"id": "t-global-e100", "arm_id": "t-global", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9211605389469036, "tune_macro_onset_offset_f1": 0.86317952365811}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/t-global-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "54fabb5e146e9d24a65a7bb8f7256bf08df3c4ba84a580ca16e5805058f99c2b", "included": false}},
+        {"id": "t-local-e100", "arm_id": "t-local", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9209229684841104, "tune_macro_onset_offset_f1": 0.855642207536162}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-e100-evalhash-recovery-v1/t-local-e100-evalfix2-20260820/e100/validation/canonical-validation.json", "sha256": "15f67693c4979b5dc998442d8e8428abd4ec73758de1ad0fb9ae418378f59b7e", "included": false}},
+        {"id": "p1-e150", "arm_id": "p1", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9180270382583791, "tune_macro_onset_offset_f1": 0.8591334176356277}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/p1-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "70399081254a69aa771a53de6e03b5bc7b9a47112765c728a644dcf5e3071659", "included": false}},
+        {"id": "p4-e150", "arm_id": "p4", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9214508184678016, "tune_macro_onset_offset_f1": 0.8669444322493112}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/p4-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "80cdc8069a5a859792c27280c7d1a45e6d88481ee48ce60df4ef170ef934bdff", "included": false}},
+        {"id": "p4-wide-e150", "arm_id": "p4-wide", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9200875667962465, "tune_macro_onset_offset_f1": 0.8606435726437703}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/p4-wide-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "685050367e9f0e5642565fca7ae71e3da5570fb6bdb7395e472935bce17ab1d4", "included": false}},
+        {"id": "p12-e150", "arm_id": "p12", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9220625927049491, "tune_macro_onset_offset_f1": 0.8657285968734992}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/p12-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "c03bb5045b2ed9ccc66e921b69f9026173b0694b7337c4571b71be65ef3a4372", "included": false}},
+        {"id": "rf-e150", "arm_id": "rf", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9232977827875803, "tune_macro_onset_offset_f1": 0.8645550962183499}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/rf-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "4bd1999eb5bcd73ca858050c43e5b3a5f9b8605734392e24bd0fd915a6b8db94", "included": false}},
+        {"id": "r-moderate-e150", "arm_id": "r-moderate", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9161836318465464, "tune_macro_onset_offset_f1": 0.8585299901343983}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/r-moderate-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "a1394914807c1558f9e1151de3c94e7258a3116182c036a67d70a8fccd4af39d", "included": false}},
+        {"id": "r-strong-e150", "arm_id": "r-strong", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9257670736482787, "tune_macro_onset_offset_f1": 0.8689654093578278}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/r-strong-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "5d92a868728891cdb935a85e14eb348fb7a9e0d9ac86d9589c343c34c300ca12", "included": false}},
+        {"id": "t-global-e150", "arm_id": "t-global", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9273503321191682, "tune_macro_onset_offset_f1": 0.8719101518074468}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/t-global-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "3fdc9e1e0e65337a2fff54bf5db0a1d8354ecc88b6054c6db1569cacb3e38bd5", "included": false}},
+        {"id": "t-local-e150", "arm_id": "t-local", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9248943030720019, "tune_macro_onset_offset_f1": 0.8647457103697466}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/t-local-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "c764c02f8fde717250829dd01278d935c431cee2a4cab1e9249cf645a992d027", "included": false}}
+      ]
+    },
+    {
+      "id": "archival-pitch-detuning",
+      "protocol_id": "archival-pitch-detuning-e100-e150",
+      "description": "Exact paired AP and APD recipe results at fixed epochs 100 and 150.",
+      "observations": [
+        {"id": "ap-e100", "arm_id": "ap", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9213131679819916, "tune_macro_onset_offset_f1": 0.8615480875063403}, "artifact": {"role": "canonical validation result", "locator": "evaluations/recommended-augmentation-ap-apd-s424242-e150-v1/ap-run-1/e100/validation/canonical-validation.json", "sha256": "ddf92076f4e92200500b02902e6836541e596b16bbea2339eedb8cdb1f657ba1", "included": false}},
+        {"id": "apd-e100", "arm_id": "apd", "checkpoint": {"epoch": 100, "optimizer_step": 24000}, "metrics": {"tune_macro_onset_f1": 0.9172351850532712, "tune_macro_onset_offset_f1": 0.8515873016490713}, "artifact": {"role": "canonical validation result", "locator": "evaluations/recommended-augmentation-ap-apd-s424242-e150-v1/apd-run-1/e100/validation/canonical-validation.json", "sha256": "61a7f0393e99c50c7c1e28b06edff502d214ce4411b8dc04d3d862f8c04bd36b", "included": false}},
+        {"id": "ap-e150", "arm_id": "ap", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9248117075467385, "tune_macro_onset_offset_f1": 0.8682266432789384}, "artifact": {"role": "canonical validation result", "locator": "evaluations/recommended-augmentation-ap-apd-s424242-e150-v1/ap-run-1/e150/validation/canonical-validation.json", "sha256": "3c60abf9cc41ca02c0f22c265b9e330862c408324b98912455ef1c771924d837", "included": false}},
+        {"id": "apd-e150", "arm_id": "apd", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9219215181577721, "tune_macro_onset_offset_f1": 0.8617049990394382}, "artifact": {"role": "canonical validation result", "locator": "evaluations/recommended-augmentation-ap-apd-s424242-e150-v1/apd-run-1/e150/validation/canonical-validation.json", "sha256": "8ad0af2bb38b243a662410a88edfe6868b3bac7648b533f7e08321339c3420e3", "included": false}}
+      ]
+    },
+    {
+      "id": "late-interaction",
+      "protocol_id": "rf-global-stretch-late-interaction",
+      "description": "Four cells in the post-hoc late-training RF by global-stretch interaction.",
+      "observations": [
+        {"id": "interaction-control-e150", "arm_id": "interaction-control", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9180270382583791, "tune_macro_onset_offset_f1": 0.8591334176356277}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-preference-screen-s424242-e150-continuation-v1/p1-e150-continuation1-20260824/e150/validation/canonical-validation.json", "sha256": "70399081254a69aa771a53de6e03b5bc7b9a47112765c728a644dcf5e3071659", "included": false}},
+        {"id": "interaction-rf-e150", "arm_id": "rf-a", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9185055103988683, "tune_macro_onset_offset_f1": 0.8584477439974396}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-interaction-followup-s424242-e150-v1/rf-a-interaction-rf-ts-late-e150-s424242-v1-retry2-20260826/validation/canonical-validation.json", "sha256": "a84218d36a1f341028214fcffaad8d55ca6a8b9085af0a1232a67804f7086600", "included": false}},
+        {"id": "interaction-ts-e150", "arm_id": "ts-b", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9187411141302014, "tune_macro_onset_offset_f1": 0.8596348803015753}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-interaction-followup-s424242-e150-v1/ts-b-interaction-rf-ts-late-e150-s424242-v1-retry2-20260826/validation/canonical-validation.json", "sha256": "5e3c42984a60d32420132c0908dc5fe2f27a996c85951c88aa3ac4e63b014591", "included": false}},
+        {"id": "interaction-both-e150", "arm_id": "rf-a-ts-b", "checkpoint": {"epoch": 150, "optimizer_step": 36000}, "metrics": {"tune_macro_onset_f1": 0.9198578338831157, "tune_macro_onset_offset_f1": 0.8620033588718078}, "artifact": {"role": "canonical validation result", "locator": "evaluations/augmentation-interaction-followup-s424242-e150-v1/rf-a-ts-b-interaction-rf-ts-late-e150-s424242-v1-retry2-20260826/validation/canonical-validation.json", "sha256": "b936e455f1b51f302587fc9b2d1b592c38c4d137c3d730bf9bcc5f3d9ba12cdb", "included": false}}
+      ]
+    }
+  ],
+  "derived_results": [
+    {"id": "c-minus-o-e150", "protocol_id": "compact-original-vs-conventional-e150", "kind": "difference", "formula": "c-e150 - o-e150", "observation_ids": ["c-e150", "o-e150"], "values": {"tune_macro_onset_f1": 0.01769920169229877, "tune_macro_onset_offset_f1": 0.016217796625217606}, "interpretation": "The conventional package improved both validation metrics at the fixed epoch-150 horizon."},
+    {"id": "minus-gain-chorus-vs-c", "protocol_id": "conventional-lofo-e150", "kind": "difference", "formula": "lofo-minus-gain-chorus-e150 - lofo-c-full-e150", "observation_ids": ["lofo-minus-gain-chorus-e150", "lofo-c-full-e150"], "values": {"tune_macro_onset_f1": 0.0003779953523983526, "tune_macro_onset_offset_f1": 0.0037989661942180453}, "interpretation": "Removing gain/chorus improved both metrics inside the dense package."},
+    {"id": "minus-noise-vs-c", "protocol_id": "conventional-lofo-e150", "kind": "difference", "formula": "lofo-minus-noise-e150 - lofo-c-full-e150", "observation_ids": ["lofo-minus-noise-e150", "lofo-c-full-e150"], "values": {"tune_macro_onset_f1": -0.004195599837438113, "tune_macro_onset_offset_f1": 0.0016475104437896348}, "interpretation": "Removing generic Gaussian noise traded lower onset F1 for slightly higher onset-plus-offset F1."},
+    {"id": "minus-reverb-filters-vs-c", "protocol_id": "conventional-lofo-e150", "kind": "difference", "formula": "lofo-minus-reverb-filters-e150 - lofo-c-full-e150", "observation_ids": ["lofo-minus-reverb-filters-e150", "lofo-c-full-e150"], "values": {"tune_macro_onset_f1": 0.002339099635526254, "tune_macro_onset_offset_f1": 0.005750192655668451}, "interpretation": "Removing the combined reverb/filter family improved both metrics inside the dense package."},
+    {"id": "minus-pitch-vs-c", "protocol_id": "conventional-lofo-e150", "kind": "difference", "formula": "lofo-minus-pitch-shift-e150 - lofo-c-full-e150", "observation_ids": ["lofo-minus-pitch-shift-e150", "lofo-c-full-e150"], "values": {"tune_macro_onset_f1": -0.015603575689273175, "tune_macro_onset_offset_f1": -0.010010625756781466}, "interpretation": "Pitch shift was the only conventional family whose removal clearly hurt both metrics."},
+    {"id": "minus-time-vs-c", "protocol_id": "conventional-lofo-e150", "kind": "difference", "formula": "lofo-minus-time-stretch-e150 - lofo-c-full-e150", "observation_ids": ["lofo-minus-time-stretch-e150", "lofo-c-full-e150"], "values": {"tune_macro_onset_f1": -0.0003249390483990311, "tune_macro_onset_offset_f1": 0.004841765988746083}, "interpretation": "Removing global stretch was almost neutral for onsets and improved onset-plus-offset F1 inside the dense package."},
+    {"id": "archival-vs-slot-control-e150", "protocol_id": "successor-methods-e100-e150", "kind": "difference", "formula": "archival-noise-e150 - lofo-minus-noise-e150", "observation_ids": ["archival-noise-e150", "lofo-minus-noise-e150"], "values": {"tune_macro_onset_f1": 0.00847220211294264, "tune_macro_onset_offset_f1": 0.010389142746118463}, "interpretation": "Archival noise/hum improved both metrics over its slot-matched duplicated-original control."},
+    {"id": "detuning-vs-slot-control-e150", "protocol_id": "successor-methods-e100-e150", "kind": "difference", "formula": "fractional-detuning-e150 - lofo-minus-gain-chorus-e150", "observation_ids": ["fractional-detuning-e150", "lofo-minus-gain-chorus-e150"], "values": {"tune_macro_onset_f1": -0.0007992097341632531, "tune_macro_onset_offset_f1": 0.0013660843134631895}, "interpretation": "Fractional detuning was mixed against its slot-matched control."},
+    {"id": "p4-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "p4-e150 - p1-e150", "observation_ids": ["p4-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.0034237802094225778, "tune_macro_onset_offset_f1": 0.007811014613683498}, "interpretation": "The compact four-shift grid improved both metrics over legacy pitch."},
+    {"id": "p4-wide-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "p4-wide-e150 - p1-e150", "observation_ids": ["p4-wide-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.002060528537867423, "tune_macro_onset_offset_f1": 0.0015101550081426662}, "interpretation": "The wide four-shift grid gave only a small improvement."},
+    {"id": "p12-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "p12-e150 - p1-e150", "observation_ids": ["p12-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.00403555444657, "tune_macro_onset_offset_f1": 0.006595179237871562}, "interpretation": "The dense twelve-shift grid improved both metrics over legacy pitch, but did not dominate p4 on onset-plus-offset F1."},
+    {"id": "rf-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "rf-e150 - p1-e150", "observation_ids": ["rf-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.005270744529201288, "tune_macro_onset_offset_f1": 0.005421678582722245}, "interpretation": "Combined reverb/filter exposure improved both metrics in the simplified preference context."},
+    {"id": "moderate-reverb-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "r-moderate-e150 - p1-e150", "observation_ids": ["r-moderate-e150", "p1-e150"], "values": {"tune_macro_onset_f1": -0.001843406411832671, "tune_macro_onset_offset_f1": -0.0006034275012293255}, "interpretation": "Moderate reverb did not improve the p1 control."},
+    {"id": "strong-reverb-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "r-strong-e150 - p1-e150", "observation_ids": ["r-strong-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.007740035389899647, "tune_macro_onset_offset_f1": 0.009831991722200173}, "interpretation": "Strong reverb improved both metrics and outperformed moderate reverb."},
+    {"id": "global-stretch-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "t-global-e150 - p1-e150", "observation_ids": ["t-global-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.009323293860789117, "tune_macro_onset_offset_f1": 0.012776734171819126}, "interpretation": "Global stretch was the strongest preference-screen treatment on both metrics."},
+    {"id": "local-stretch-vs-p1-e150", "protocol_id": "preference-screen-e100-e150", "kind": "difference", "formula": "t-local-e150 - p1-e150", "observation_ids": ["t-local-e150", "p1-e150"], "values": {"tune_macro_onset_f1": 0.006867264813622875, "tune_macro_onset_offset_f1": 0.0056122927341188955}, "interpretation": "Local time warp improved both metrics but did not match global stretch."},
+    {"id": "apd-minus-ap-e100", "protocol_id": "archival-pitch-detuning-e100-e150", "kind": "difference", "formula": "apd-e100 - ap-e100", "observation_ids": ["apd-e100", "ap-e100"], "values": {"tune_macro_onset_f1": -0.004077982928720414, "tune_macro_onset_offset_f1": -0.009960785857269006}, "interpretation": "Adding detuning hurt both metrics at epoch 100."},
+    {"id": "apd-minus-ap-e150", "protocol_id": "archival-pitch-detuning-e100-e150", "kind": "difference", "formula": "apd-e150 - ap-e150", "observation_ids": ["apd-e150", "ap-e150"], "values": {"tune_macro_onset_f1": -0.0028901893889663466, "tune_macro_onset_offset_f1": -0.006521644239500191}, "interpretation": "Adding detuning hurt both metrics at epoch 150."},
+    {"id": "late-rf-minus-control", "protocol_id": "rf-global-stretch-late-interaction", "kind": "difference", "formula": "interaction-rf-e150 - interaction-control-e150", "observation_ids": ["interaction-rf-e150", "interaction-control-e150"], "values": {"tune_macro_onset_f1": 0.0004784721404892389, "tune_macro_onset_offset_f1": -0.0006856736381880557}, "interpretation": "Late RF exposure alone was mixed."},
+    {"id": "late-ts-minus-control", "protocol_id": "rf-global-stretch-late-interaction", "kind": "difference", "formula": "interaction-ts-e150 - interaction-control-e150", "observation_ids": ["interaction-ts-e150", "interaction-control-e150"], "values": {"tune_macro_onset_f1": 0.0007140758718223728, "tune_macro_onset_offset_f1": 0.0005014626659476384}, "interpretation": "Late global-stretch exposure alone was slightly positive."},
+    {"id": "late-both-minus-control", "protocol_id": "rf-global-stretch-late-interaction", "kind": "difference", "formula": "interaction-both-e150 - interaction-control-e150", "observation_ids": ["interaction-both-e150", "interaction-control-e150"], "values": {"tune_macro_onset_f1": 0.0018307956247366475, "tune_macro_onset_offset_f1": 0.002869941236180118}, "interpretation": "The two late exposures together improved both metrics more than either exposure alone."},
+    {"id": "late-rf-ts-interaction", "protocol_id": "rf-global-stretch-late-interaction", "kind": "difference_in_differences", "formula": "interaction-both-e150 - interaction-rf-e150 - interaction-ts-e150 + interaction-control-e150", "observation_ids": ["interaction-both-e150", "interaction-rf-e150", "interaction-ts-e150", "interaction-control-e150"], "values": {"tune_macro_onset_f1": 0.0006382476124250358, "tune_macro_onset_offset_f1": 0.0030541522084205353}, "interpretation": "The descriptive interaction was positive, especially for onset-plus-offset F1; that interaction was positive on all six tunes for the primary metric."}
+  ],
+  "interpretations": [
+    "Augmentation as a whole improved the fixed-horizon compact Galdr validation result over original-only training.",
+    "Pitch shifting is the clearest retained conventional family: removing it from the dense package hurt both metrics, and targeted pitch grids improved on the legacy-pitch control.",
+    "Corpus-matched archival noise/hum improved both metrics over its slot-matched control and is more informative for this archive domain than assuming generic Gaussian noise is sufficient.",
+    "Global time stretch was the strongest treatment in the controlled preference screen; local time warp helped but was weaker.",
+    "Reverb results are strength- and context-dependent. Moderate reverb was neutral to negative, strong reverb was positive, and the combined RF family changed sign between the dense leave-one-out context and the simplified preference context.",
+    "Fractional detuning should not be added to the archival-plus-pitch recipe on this evidence: the exact APD-minus-AP comparison was negative at both checkpoints.",
+    "A targeted Galdr mixture is justified as a dataset-specific engineering choice because it avoids settings with negative or redundant conditional evidence and makes exposure explicit; these experiments do not identify a universally optimal number of families or clean-to-augmented fraction."
+  ],
+  "limitations": [
+    "Every model result uses one initialization and data-order seed, 424242.",
+    "All reported model comparisons use six validation tunes; there are no test-set claims and no multi-seed uncertainty estimates.",
+    "The studies support engineering decisions for the current hf2-group-v2 corpus, not universal rankings of AMT augmentation methods.",
+    "LOFO effects are conditional on the dense conventional package and can change when competing families or their exposure frequencies change.",
+    "The preference design changes 12 logical slots in every treatment arm, but pitch arms substitute one pitch grid for another while reverb and time arms replace original slots; those contrasts answer different questions even though their exposure counts match.",
+    "RF denotes a combined reverb plus high/low-pass filtering treatment, so its results do not isolate reverb from filtering.",
+    "The RF by global-stretch interaction is post-hoc, begins after a shared epoch-100 checkpoint, applies treatments on separate draws, and is descriptive rather than a full-course factorial estimate.",
+    "The O/C campaign had a prespecified 30-candidate validation grid and winner rule. The O/C values in this card are fixed epoch-150 rows and must not be described as the campaign's winner-selected estimates.",
+    "The Galdr experiments span evolving AMT-Augmentor and Galdr source trees. The local Galdr control revision binds the protocol configs, but no single historical AMT-Augmentor revision is claimed across all results.",
+    "The exact Galdr control revision and its protocol configs must be published or bundled before external release; they are currently recorded as unpublished.",
+    "Canonical evaluation artifacts are identified by locator and SHA-256 but are not redistributed in this package."
+  ],
+  "provenance": {
+    "compiled_date": "2026-08-30",
+    "source_project": "Galdr research artifact for Automatic Music Transcription for Oral Traditions: Methodology and a Hardanger Fiddle Case Study",
+    "artifact_hash_algorithm": "sha256",
+    "canonical_artifacts_included": false,
+    "verification": "Values were copied at full available precision from completed canonical-validation artifacts. Every locator resolves uniquely through artifact_bases: configs under the exact local Galdr control revision, and runs/evaluations/summaries under the separately declared logical runtime root. Both bases are currently unpublished, and every external artifact is additionally bound by SHA-256."
+  }
+}

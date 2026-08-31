@@ -59,6 +59,9 @@ dev = [
     "types-tqdm>=4.64.0",
 ]
 
+[tool.setuptools.package-data]
+amt_augmentor = ["research_references/*.json"]
+
 [project.scripts]
 amt-augmentor = "amt_augmentor.main:main"
 

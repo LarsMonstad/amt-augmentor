@@ -2,3 +2,6 @@ include README.md
 include LICENSE
 include docs/AUGMENTATION_SCOPE.md
 include docs/HARDANGER_FIDDLE_CASE_STUDY.md
+include docs/MAESTRO_TRANSKUN_CASE_STUDY.md
+include docs/RESEARCH_REFERENCES.md
+recursive-include amt_augmentor/research_references *.json

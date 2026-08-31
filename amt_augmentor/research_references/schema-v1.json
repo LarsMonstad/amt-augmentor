@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/LarsMonstad/amt-augmentor/raw/main/amt_augmentor/research_references/schema-v1.json",
+  "title": "AMT-Augmentor research reference card, version 1",
+  "description": "A portable record of completed AMT augmentation results. A card reports evidence and never changes package runtime defaults.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "kind",
+    "reference_id",
+    "status",
+    "title",
+    "summary",
+    "package_policy",
+    "scope",
+    "artifact_bases",
+    "software_provenance",
+    "metric_definitions",
+    "protocols",
+    "result_sets",
+    "derived_results",
+    "interpretations",
+    "limitations",
+    "provenance"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "minLength": 1},
+    "schema_version": {"const": 1},
+    "kind": {"const": "amt_augmentor_research_reference"},
+    "reference_id": {"$ref": "#/$defs/id"},
+    "status": {"enum": ["complete", "superseded", "withdrawn"]},
+    "title": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "package_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changes_runtime_defaults", "recipe_status", "guidance"],
+      "properties": {
+        "changes_runtime_defaults": {"const": false},
+        "recipe_status": {"enum": ["dataset_specific_evidence", "no_recipe"]},
+        "guidance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_level",
+        "dataset",
+        "domain",
+        "training_source_count",
+        "validation_units",
+        "random_seeds",
+        "selection_partition",
+        "test_data_accessed",
+        "checkpoint_selection",
+        "publication_status"
+      ],
+      "properties": {
+        "evidence_level": {"enum": ["single_seed_validation", "multi_seed_validation", "held_out_test"]},
+        "dataset": {"type": "string", "minLength": 1},
+        "domain": {"type": "string", "minLength": 1},
+        "training_source_count": {"type": "integer", "minimum": 1},
+        "validation_units": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "count"],
+          "properties": {
+            "kind": {"type": "string", "minLength": 1},
+            "count": {"type": "integer", "minimum": 1}
+          }
+        },
+        "random_seeds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "selection_partition": {"type": "string", "minLength": 1},
+        "test_data_accessed": {"type": "boolean"},
+        "checkpoint_selection": {"type": "string", "minLength": 1},
+        "publication_status": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact_bases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact_base"}
+    },
+    "software_provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/software_reference"}
+    },
+    "metric_definitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/metric_definition"}
+    },
+    "protocols": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/protocol"}
+    },
+    "result_sets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/result_set"}
+    },
+    "derived_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/derived_result"}
+    },
+    "interpretations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compiled_date",
+        "source_project",
+        "artifact_hash_algorithm",
+        "canonical_artifacts_included",
+        "verification"
+      ],
+      "properties": {
+        "compiled_date": {"type": "string", "format": "date"},
+        "source_project": {"type": "string", "minLength": 1},
+        "artifact_hash_algorithm": {"const": "sha256"},
+        "canonical_artifacts_included": {"type": "boolean"},
+        "verification": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[a-z0-9._-]*[a-z0-9])?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "metric_values": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {"type": "number"}
+    },
+    "artifact_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "uri", "revision", "availability", "locator_prefixes", "immutability"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["git_repository", "logical_artifact_root"]},
+        "uri": {"type": "string", "minLength": 1},
+        "revision": {"type": ["string", "null"]},
+        "availability": {"enum": ["bundled", "public", "unpublished"]},
+        "locator_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "immutability": {"type": "string", "minLength": 1}
+      }
+    },
+    "software_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "revision", "revision_scope"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "revision": {"type": ["string", "null"]},
+        "revision_scope": {"type": "string", "minLength": 1}
+      }
+    },
+    "metric_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "unit", "aggregation", "range"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1},
+        "aggregation": {"type": "string", "minLength": 1},
+        "range": {
+          "type": "array",
+          "prefixItems": [{"type": "number"}, {"type": "number"}],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "transform_families", "description"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1},
+        "transform_families": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "description": {"type": "string", "minLength": 1},
+        "logical_exposure": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "source_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "locator", "sha256", "included"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "included": {"type": "boolean"}
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "question",
+        "design",
+        "model",
+        "training",
+        "evaluation",
+        "arms",
+        "source_artifacts"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "question": {"type": "string", "minLength": 1},
+        "design": {"type": "string", "minLength": 1},
+        "model": {"type": "object", "minProperties": 1},
+        "training": {"type": "object", "minProperties": 1},
+        "evaluation": {"type": "object", "minProperties": 1},
+        "arms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/arm"}
+        },
+        "source_artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/source_artifact"}
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "epoch": {"type": "integer", "minimum": 0},
+        "optimizer_step": {"type": "integer", "minimum": 0},
+        "label": {"type": "string", "minLength": 1}
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "arm_id", "checkpoint", "metrics", "artifact"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "arm_id": {"$ref": "#/$defs/id"},
+        "checkpoint": {"$ref": "#/$defs/checkpoint"},
+        "metrics": {"$ref": "#/$defs/metric_values"},
+        "artifact": {"$ref": "#/$defs/source_artifact"},
+        "notes": {"type": "string", "minLength": 1}
+      }
+    },
+    "result_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "protocol_id", "description", "observations"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "protocol_id": {"$ref": "#/$defs/id"},
+        "description": {"type": "string", "minLength": 1},
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/observation"}
+        }
+      }
+    },
+    "derived_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "protocol_id",
+        "kind",
+        "formula",
+        "observation_ids",
+        "values",
+        "interpretation"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "protocol_id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["difference", "difference_in_differences", "descriptive_summary"]},
+        "formula": {"type": "string", "minLength": 1},
+        "observation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "values": {"$ref": "#/$defs/metric_values"},
+        "interpretation": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

@@ -187,18 +187,29 @@ explicitly enabled, and must not be used for new training data. See
 [`docs/AUGMENTATION_SCOPE.md`](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/AUGMENTATION_SCOPE.md)
 for the decision and current evaluation scope.
 
-## Research case study
+## Research references
 
-A configuration evaluated on historical Hardanger fiddle recordings is
-described separately in the
-[Hardanger fiddle case study](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/HARDANGER_FIDDLE_CASE_STUDY.md).
-It supports
-the manuscript *Automatic Music Transcription for Oral Traditions: Methodology
-and a Hardanger Fiddle Case Study* (in preparation). The case study documents
-one corpus-specific use of the toolbox; it is neither a package default nor a
-claim that the same settings are optimal for other AMT datasets. The exact
-Galdr experiment manifests and training adapters belong with that research
-artifact, not in the general-purpose package API.
+Completed augmentation studies are documented in the
+[research-reference index](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/RESEARCH_REFERENCES.md).
+Each reference pairs a readable case study with a versioned JSON card that
+records full-precision metrics, evaluation scope, exposure controls,
+limitations, and hashes of the upstream research artifacts.
+
+The completed references cover the
+[Galdr Hardanger fiddle case study](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/HARDANGER_FIDDLE_CASE_STUDY.md),
+which supports the manuscript *Automatic Music Transcription for Oral
+Traditions: Methodology and a Hardanger Fiddle Case Study* (in preparation),
+and the
+[MAESTRO/Transkun case study](https://github.com/LarsMonstad/amt-augmentor/blob/main/docs/MAESTRO_TRANSKUN_CASE_STUDY.md),
+which compares an untouched official checkpoint, clean fine-tuning,
+Transkun's built-in augmentation, three controlled single-family
+AMT-Augmentor arms, and two physical dataset-expansion bundles.
+
+Reference cards report evidence; they do not enable a recipe. The Galdr and
+MAESTRO results are corpus- and model-specific, are not package defaults, and
+do not claim that the same settings are optimal for other AMT datasets. Exact
+training manifests, datasets, checkpoints, and model adapters remain in their
+source research artifacts rather than the general-purpose package API.
 
 ## Requirements
 
